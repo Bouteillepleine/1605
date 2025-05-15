@@ -239,9 +239,7 @@ jobs:
 
           if [ "${{ inputs.bbr_enable }}" == "bbr" ]; then
             echo "Applying bbr configs..."
-      - name: BBR
-        run: |
-          cd "$CONFIG/kernel_platform"
+    
           echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> ./common/arch/arm64/configs/gki_defconfig
