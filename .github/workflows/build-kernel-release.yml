@@ -22,15 +22,14 @@ on:
           - next-susfs
           - next-susfs-dev
         default: next
-      bbr:
-        description: "bbr"
+      bbr_enable:
+        description: "bbr?"
         required: true
         type: choice
         options:
           - bbr
           - pure
         default: pure
-
 
 jobs:
    #build-batch-1: # Non Bazel Builds
