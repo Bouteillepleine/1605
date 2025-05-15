@@ -235,9 +235,11 @@ jobs:
            # ── Strip debug to reduce size ──
           echo "CONFIG_DEBUG_KERNEL=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DYNAMIC_DEBUG=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig     
-          
-      - name: Add BBR Configuration Settings
+          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig
+
+          if [ "${{ inputs.bbr_enable }}" == "bbr" ]; then
+            echo "Applying bbr configs..."
+      - name: BBR
         run: |
           cd "$CONFIG/kernel_platform"
           echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -262,7 +264,11 @@ jobs:
           echo "CONFIG_IP_NF_TARGET_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig     
+          echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          else
+          echo "No TCP congestion control configured."
+          fi
           
       - name: Run sed and perl Commands
         run: |
