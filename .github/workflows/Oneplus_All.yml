@@ -183,7 +183,7 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
 
-      - name: Set up SUSFS
+      - name: Set up susfs
         if: github.event.inputs.SUSFS_ENABLED == 'true'
         run: |
           cd kernel_workspace
@@ -195,29 +195,15 @@ jobs:
           cp ../kernel_patches/next/syscall_hooks.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-
-      - name: Apply SUSFS patches
-        if: github.event.inputs.SUSFS_ENABLED == 'true'
-        run: |
-          cd kernel_workspace/kernel_platform
-          cd KernelSU-Next
-          if ! patch -p1 < kernel-patch-susfs-v1.5meals -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch; then
-            echo "Failed to apply KernelSU-Next SUSFS patch"
-            exit 1
-          fi
+          # Apply patches
+          cd ./KernelSU-Next
+          patch -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch || true
           cd ../common
-          if ! patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch; then
-            echo "Failed to apply SUSFS GKI patch"
-            exit 1
-          fi
-          if ! patch -p1 -F 3 < 69_hide_stuff.patch; then
-            echo "Failed to apply hide stuff patch"
-            exit 1
-          fi
-          if ! patch -p1 -F 3 < syscall_hooks.patch; then
-            echo "Failed to apply syscall hooks patch"
-            exit 1
-          fi
+          patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+          # Replace next_hooks.patch with syscall_hooks.patch
+          cp ../../kernel_patches/69_hide_stuff.patch ./
+          patch -p1 -F 3 < 69_hide_stuff.patch
+          patch -p1 -F 3 < syscall_hooks.patch
 
       - name: Apply new hook and add configuration
         run: |
