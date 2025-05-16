@@ -82,23 +82,7 @@ on:
         default: gki
         options:
           - gki
-          - perf
-      KSUNEXT_ENABLED:
-        description: "Add KSU Next"
-        required: true
-        type: boolean
-        default: true
-      SUSFS_ENABLED:
-        description: "Add SUSFS"
-        required: true
-        type: boolean
-        default: true
-      SUSFS_CI:
-        description: "Does the SUSFS module download use CI?"
-        required: true
-        type: boolean
-        default: true
-
+          - perf      
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -184,14 +168,12 @@ jobs:
           echo "Verifying LTO settings:"
           find . -type f \( -name "build.config*" -o -name "*.config" \) -exec grep -H "LTO=\|lto=" {} \;
 
-      - name: Clear Bazel cache
-        if: ${{ inputs.CPU == 'sm8650' || inputs.CPU == 'sm7675' }}
+      - name: Clear Bazel cache        
         run: |
           cd "$PLATFORM"
           bazel clean --expunge
 
-      - name: Set up KernelSU Next
-        if: ${{ inputs.KSUNEXT_ENABLED == 'true' }}
+      - name: Set up KernelSU Next       
         run: |
           cd "$PLATFORM"
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
@@ -201,8 +183,7 @@ jobs:
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
           echo "KernelSU Next version: $KSU_VERSION"
 
-      - name: Apply SUSFS and hide patches
-        if: ${{ inputs.KSUNEXT_ENABLED == 'true' && inputs.SUSFS_ENABLED == 'true' }}
+      - name: Apply SUSFS and hide patches       
         run: |
           cd "$WORKSPACE"
           git clone https://github.com/WildPlusKernel/kernel_patches.git
@@ -339,29 +320,18 @@ jobs:
             fi
           done
 
-      - name: Download Latest SUSFS Module
-        if: ${{ inputs.SUSFS_ENABLED == 'true' }}
+      - name: Download Latest SUSFS Module        
         run: |
-          cd "$WORKSPACE"
-          if [ "${{ inputs.SUSFS_CI }}" = "true" ]; then
+          cd "$WORKSPACE"          
             LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
-              jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
-            if [ -n "$LATEST_RUN_ID" ]; then
+              jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)            
               ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                 "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
               curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs_1.5.2+_CI.zip "$ARTIFACT_URL" || {
                 echo "Failed to download CI artifact, falling back to release"
                 wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
-              }
-            else
-              echo "No successful CI run found, falling back to release"
-              wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
-            fi
-          else
-            wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
-          fi
-          cp ksu_module_susfs_*.zip ./AnyKernel3-KernelSU-Next/
+              cp ksu_module_susfs_*.zip ./AnyKernel3-KernelSU-Next/
 
       - name: Get formatted date
         id: formatted_date
