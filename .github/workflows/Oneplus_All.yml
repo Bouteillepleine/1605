@@ -1,10 +1,11 @@
-name: Build KernelSU Next SUSFS All
+name: Build KernelSU Next SUSFS All (ThinLTO)
+
 on:
   workflow_dispatch:
     inputs:
       CPU:
         type: choice
-        description: "Branch"
+        description: "SoC Platform Branch"
         required: true
         default: sm8650
         options:
@@ -17,7 +18,7 @@ on:
           - sm8750
       FEIL:
         type: choice
-        description: "Configuration File"
+        description: "Device Configuration Profile"
         required: true
         default: oneplus_13r
         options:
@@ -46,7 +47,7 @@ on:
           - bug in GitHub
       CPUD:
         type: choice
-        description: "Processor Codename"
+        description: "Device Codename"
         required: true
         default: pineapple
         options:
@@ -57,7 +58,7 @@ on:
           - sun
       ANDROID_VERSION:
         type: choice
-        description: "Kernel Android Version"
+        description: "Android Base Version"
         required: true
         default: android14
         options:
@@ -67,7 +68,7 @@ on:
           - android15
       KERNEL_VERSION:
         type: choice
-        description: "Kernel Version"
+        description: "Linux Kernel Version"
         required: true
         default: "6.1"
         options:
@@ -77,62 +78,114 @@ on:
           - "6.6"
       BUILD_METHOD:
         type: choice
-        description: "Build Method"
+        description: "Build Type Selection"
         required: true
         default: gki
         options:
           - gki
           - perf
       KSUNEXT_ENABLED:
-        description: "Add KSU Next"
+        description: "Enable KernelSU Next Integration"
         required: true
         type: boolean
         default: true
       SUSFS_ENABLED:
-        description: "Add SUSFS"
+        description: "Enable SUSFS Filesystem Enhancements"
         required: true
         type: boolean
         default: true
       SUSFS_CI:
-        description: "Does the SUSFS module download use CI?"
+        description: "Use CI-built SUSFS Modules"
         required: true
         type: boolean
         default: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      THINLTO_MARKER: "-ThinLTO"
+      KSU_MODULE_VERSION: "1.5.2+"
 
     steps:
-      # Existing steps remain unchanged until LTO configuration
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 16384
+          temp-reserve-mb: 8192
+          swap-size-mb: 16384
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
 
-      - name: Enforce LTO Thin configuration
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "KernelCI-Bot"
+          git config --global user.email "kernel-ci@android.com"
+          git config --global init.defaultBranch main
+
+      - name: Install Build Essentials
+        run: |
+          sudo apt-get update && sudo apt-get full-upgrade -y
+          sudo apt-get install -y \
+            jq python3-dev python3-pip \
+            git-lfs curl patchelf \
+            bc bison flex libssl-dev \
+            libncurses-dev libelf-dev
+
+      - name: Validate Input Parameters
+        run: |
+          echo "Selected Configuration:"
+          echo "SoC: ${{ github.event.inputs.CPU }}"
+          echo "Device Profile: ${{ github.event.inputs.FEIL }}"
+          echo "Codename: ${{ github.event.inputs.CPUD }}"
+          echo "Android: ${{ github.event.inputs.ANDROID_VERSION }}"
+          echo "Kernel: ${{ github.event.inputs.KERNEL_VERSION }}"
+          echo "Build Method: ${{ github.event.inputs.BUILD_METHOD }}"
+          echo "SUSFS Source: ${{ github.event.inputs.SUSFS_CI && 'CI' || 'Release' }}"
+
+      - name: Initialize Repository
+        run: |
+          mkdir -p kernel_workspace
+          cd kernel_workspace
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git \
+            -b refs/heads/oneplus/${{ github.event.inputs.CPU }} \
+            -m ${{ github.event.inputs.FEIL }}.xml \
+            --depth=1 \
+            --repo-rev=stable
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle
+          repo forall -c 'git lfs pull'
+
+      - name: Apply Version Sanitization
+        run: |
+          cd kernel_workspace/kernel_platform
+          find . -name setlocalversion -exec sed -i \
+            -e 's/ -dirty//g' \
+            -e '/res=.*/a res=${res//-dirty/}' {} \;
+          git commit -am "Sanitize kernel version strings" || true
+
+      - name: Enforce ThinLTO Configuration
         run: |
           cd kernel_workspace/kernel_platform
           # Force ThinLTO in all build configurations
           find . -name "build.config*" -exec sed -i \
             -e 's/LTO=full/LTO=thin/g' \
             -e 's/LTO=none/LTO=thin/g' \
-            -e 's/^LTO=.*/LTO=thin/g' {} \;
+            -e '/^LTO=/d' \
+            -e '/include/a LTO=thin' {} \;
           
-          # Ensure ThinLTO flags
-          if ! grep -q "LTO=thin" common/build.config.gki; then
-            echo -e "\n# ThinLTO Configuration\nLTO=thin" >> common/build.config.gki
-          fi
-          
-          # Verify configuration
-          echo "Current LTO configuration:"
-          grep "LTO=" common/build.config.gki || true
+          # Verify LTO configuration
+          echo "Final LTO Configuration:"
+          grep -r "LTO=" --include="build.config*" .
 
-      - name: Build kernel (ThinLTO Optimized)
-        if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
+      - name: Integrate KernelSU Next
+        if: ${{ github.event.inputs.KSUNEXT_ENABLED }}
         run: |
-          cd kernel_workspace
-          export THINLTO_NAME_SUFFIX="-ThinLTO"
-          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
-
-      # Modified artifact naming with ThinLTO markers
-      - name: Upload AnyKernel3
-        uses: actions/upload-artifact@v4
-        with:
-          name: AnyKernel3_ThinLTO_KernelSU_Next_${{ env.KSUVER }}_${{ steps.feil_clean.outputs.value }}
-          path: ./AnyKernel3/*
+          cd kernel_workspace/kernel_platform
+          curl -fsSL "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | \
+            bash -s -- --branch next --lto thin
+          
+          cd KernelSU-Next
+          KSU_COMMITS=$(git rev-list --count HEAD || echo 10200)
+          echo "KSU_VERSION=$((KSU_COMMITS + 10200))" >> $
