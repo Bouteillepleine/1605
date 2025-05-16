@@ -161,7 +161,7 @@ jobs:
       - name: Initialize repo and sync
         run: |
           mkdir "$WORKSPACE" && cd "$WORKSPACE"
-          repo init -u https://github.com/schqiushui/kernel_manifest.git -b refs/heads/oneplus/${{ inputs.CPU }} -m ${{ inputs.FEIL }}.xml --depth=1 || { echo "repo init failed"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ inputs.CPU }} -m ${{ inputs.FEIL }}.xml --depth=1 || { echo "repo init failed"; exit 1; }
           for i in {1..3}; do
             repo sync -c -j$(nproc --all) --no-tags && break
             echo "repo sync failed, retrying ($i/3)"
