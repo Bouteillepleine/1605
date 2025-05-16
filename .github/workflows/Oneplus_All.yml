@@ -163,17 +163,11 @@ jobs:
       - name: Enforce LTO Thin configuration
         run: |
           cd kernel_workspace/kernel_platform
-          # Ensure LTO=thin in build.config.gki
-          sed -i 's/LTO=full/LTO=thin/g' common/build.config.gki || echo "LTO=full not found, ensuring LTO=thin"
-          sed -i 's/LTO=none/LTO=thin/g' common/build.config.gki || echo "LTO=none not found, ensuring LTO=thin"
-          if ! grep -q "LTO=thin" common/build.config.gki; then
-            echo "LTO=thin" >> common/build.config.gki
-          fi
-          # Ensure LTO=thin in other build configs
-          find . -name "build.config*" -exec sed -i 's/LTO=full/LTO=thin/g' {} \; || true
-          find . -name "build.config*" -exec sed -i 's/LTO=none/LTO=thin/g' {} \; || true
-          git add -A
-          git commit -m "Enforce LTO=thin in build configurations" || echo "No changes to commit"
+          # Force ThinLTO in all build configurations
+          find . -name "build.config*" -exec sed -i \
+            -e 's/LTO=full/LTO=thin/g' \
+            -e 's/LTO=none/LTO=thin/g' \
+            -e 's/^LTO=.*/LTO=thin/g' {} \;
 
       - name: Set up KernelSU Next
         if: github.event.inputs.KSUNEXT_ENABLED == 'true'
