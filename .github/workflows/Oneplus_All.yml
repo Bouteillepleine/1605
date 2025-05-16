@@ -168,10 +168,31 @@ jobs:
       - name: Enforce LTO Thin configuration
         run: |
           cd kernel_workspace/kernel_platform
-          find . -name "build.config*" -exec sed -i \
+          find . -type f \( -name "build.config*" -o -name "*.config" \) -exec sed -i \
             -e 's/LTO=full/LTO=thin/g' \
             -e 's/LTO=none/LTO=thin/g' \
-            -e 's/^LTO=.*/LTO=thin/g' {} \;
+            -e 's/LTO=default/LTO=thin/g' \
+            -e 's/lto=full/lto=thin/g' \
+            -e 's/lto=none/lto=thin/g' \
+            -e 's/lto=default/lto=thin/g' \
+            -e 's/^LTO=.*/LTO=thin/g' \
+            -e 's/^lto=.*/lto=thin/g' {} \;
+          echo "Verifying LTO settings:"
+          find . -type f \( -name "build.config*" -o -name "*.config" \) -exec grep -H "LTO=\|lto=" {} \;
+
+      - name: Configure Bazel for LTO Thin
+        if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
+        run: |
+          cd kernel_workspace/kernel_platform
+          echo "build --define=LTO=thin" > .bazelrc
+          echo "Bazel configuration:"
+          cat .bazelrc
+
+      - name: Clear Bazel cache
+        if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
+        run: |
+          cd kernel_workspace/kernel_platform
+          bazel clean --expunge
 
       - name: Set up KernelSU Next
         if: github.event.inputs.KSUNEXT_ENABLED == 'true'
@@ -193,17 +214,41 @@ jobs:
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./KernelSU-Next/
           cp ../kernel_patches/next/syscall_hooks.patch ./common/
+          cp ../kernel_patches/69_hide_stuff.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          # Apply patches
-          cd ./KernelSU-Next
-          patch -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch || true
+          for patch in ./common/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch \
+                       ./KernelSU-Next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch \
+                       ./common/syscall_hooks.patch \
+                       ./common/69_hide_stuff.patch; do
+            if [ ! -f "$patch" ]; then
+              echo "Error: Patch file $patch not found"
+              exit 1
+            fi
+          done
+
+      - name: Apply SUSFS patches
+        if: github.event.inputs.SUSFS_ENABLED == 'true'
+        run: |
+          cd kernel_workspace/kernel_platform
+          cd KernelSU-Next
+          if ! patch -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch; then
+            echo "Failed to apply KernelSU-Next SUSFS patch"
+            exit 1
+          fi
           cd ../common
-          patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-          # Replace next_hooks.patch with syscall_hooks.patch
-          cp ../../kernel_patches/69_hide_stuff.patch ./
-          patch -p1 -F 3 < 69_hide_stuff.patch
-          patch -p1 -F 3 < syscall_hooks.patch
+          if ! patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch; then
+            echo "Failed to apply SUSFS GKI patch"
+            exit 1
+          fi
+          if ! patch -p1 -F 3 < 69_hide_stuff.patch; then
+            echo "Failed to apply hide stuff patch"
+            exit 1
+          fi
+          if ! patch -p1 -F 3 < syscall_hooks.patch; then
+            echo "Failed to apply syscall hooks patch"
+            exit 1
+          fi
 
       - name: Apply new hook and add configuration
         run: |
@@ -259,16 +304,23 @@ jobs:
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i '2s/check_defconfig//' ./common/build.config.gki
 
+      - name: Check disk space before build
+        run: |
+          echo "Disk space before build:"
+          df -h
+
       - name: Build kernel
         if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
-          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
+          echo "Building with LTO=thin"
+          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }} --lto=thin --verbose
 
       - name: Fallback build kernel
         if: ${{ github.event.inputs.CPU != 'sm8650' && github.event.inputs.CPU != 'sm7675' }}
         run: |
           cd kernel_workspace
+          echo "Building with LTO=thin"
           LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
 
       - name: Make AnyKernel3
@@ -277,7 +329,7 @@ jobs:
           rm -rf ./AnyKernel3/.git
           dir1="./kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
           target1="./AnyKernel3/"
-          image_path=$(find ./kernel_workspace/kernel_platform -name "Image" -type Rosinette -type f | head -n 1)
+          image_path=$(find ./kernel_workspace/kernel_platform -name "Image" -type f | head -n 1)
           if [ -z "$image_path" ]; then
             echo "Error: Kernel Image file not found"
             exit 1
