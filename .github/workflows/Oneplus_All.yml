@@ -167,7 +167,7 @@ jobs:
 
       - name: Enforce LTO Thin configuration
         run: |
-          cd kernel_workspace/kernel_platform
+          cd "$PLATFORM"
           find . -type f \( -name "build.config*" -o -name "*.config" \) -exec sed -i \
             -e 's/LTO=full/LTO=thin/g' \
             -e 's/LTO=none/LTO=thin/g' \
