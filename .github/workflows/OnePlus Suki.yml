@@ -6,7 +6,7 @@ on:
         type: choice
         description: "Branch"
         required: true
-        default: sm8650
+        default: sm8550
         options:
           - sm7550
           - sm7675
@@ -19,7 +19,7 @@ on:
         type: choice
         description: "Configuration File"
         required: true
-        default: oneplus_13r
+        default: oneplus_ace2pro_v
         options:
           - oneplus_nord_ce4_v
           - oneplus_ace_3v_v
@@ -47,7 +47,7 @@ on:
         type: choice
         description: "Processor Codename"
         required: true
-        default: pineapple
+        default: kalama
         options:
           - crow
           - waipio
@@ -58,7 +58,7 @@ on:
         type: choice
         description: "Kernel Android Version"
         required: true
-        default: android14
+        default: android13
         options:
           - android12
           - android13
@@ -68,7 +68,7 @@ on:
        type: choice
        description: "Kernel Version"
        required: true
-       default: "6.1"
+       default: "5.15"
        options:
          - "5.10"
          - "5.15"
@@ -289,7 +289,7 @@ jobs:
             echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+            echo "azionali:CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
             echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
