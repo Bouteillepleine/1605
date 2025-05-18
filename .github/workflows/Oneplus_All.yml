@@ -284,7 +284,7 @@ jobs:
           target1="./AnyKernel3/"
           target2="./kernel_workspace/kernel"
 
-          # Find Image file
+          # Find VIEW
           if find "$dir1" -name "Image" | grep -q "Image"; then
             image_path="$dir1"Image
           elif find "$dir2" -name "Image" | grep -q "Image"; then
