@@ -372,17 +372,36 @@ jobs:
               echo "CONFIG_CRYPTO_LZ4K_OPLUS=y" >> "$CONFIG_FILE"
               echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
             fi
-          fi
+          fi  
       - name: Build kernel
         if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
+          echo "Building kernel with LTO=thin for CPU=${{ github.event.inputs.CPU }}"
           LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.PROCESSOR_CODE }} ${{ github.event.inputs.BUILD_METHOD }}
+          echo "Build completed"
+
       - name: Fallback build kernel
         if: ${{ github.event.inputs.CPU != 'sm8650' && github.event.inputs.CPU != 'sm7675' }}
         run: |
           cd kernel_workspace
+          echo "Building kernel with LTO=thin for CPU=${{ github.event.inputs.CPU }}"
           LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.PROCESSOR_CODE }} ${{ github.event.inputs.BUILD_METHOD }}
+          echo "Build completed"
+
+      - name: Validate LTO configuration
+        run: |
+          cd kernel_workspace/kernel_platform
+          CONFIG_FILE=$(find out -name ".config" -type f | head -n 1)
+          if [ -f "$CONFIG_FILE" ]; then
+          if grep -q "CONFIG_LTO_CLANG_THIN=y" "$CONFIG_FILE"; then
+          echo "LTO=thin successfully applied"
+          else
+          echo "Warning: LTO=thin not found in kernel configuration"
+          fi
+          else
+          echo "Kernel .config file not found, cannot validate LTO configuration"
+          fi
       - name: Make AnyKernel3
         run: |
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
