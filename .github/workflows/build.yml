@@ -159,7 +159,7 @@ jobs:
           elif [ "${{ inputs.ksun_branch }}" == "next-susfs" ]; then
             BASE_VERSION=10198
           elif [ "${{ inputs.ksun_branch }}" == "next-susfs-dev" ]; then
-            BASE_VERSION=10200
+            BASE_VERSION=10198
           else
             BASE_VERSION=10200
           fi
