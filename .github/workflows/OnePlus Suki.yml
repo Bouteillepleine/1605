@@ -156,9 +156,13 @@ jobs:
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync
           if [ -e kernel_platform/common/BUILD.bazel ]; then
             sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/common/BUILD.bazel
+            sed -i 's/lto = "default"/lto = "thin"/g' kernel_platform/common/BUILD.bazel
+            sed -i 's/lto = "none"/lto = "thin"/g' kernel_platform/common/BUILD.bazel
           fi
           if [ -e kernel_platform/msm-kernel/BUILD.bazel ]; then
             sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/msm-kernel/BUILD.bazel
+            sed -i 's/lto = "default"/lto = "thin"/g' kernel_platform/msm-kernel/BUILD.bazel
+            sed -i 's/lto = "none"/lto = "thin"/g' kernel_platform/msm-kernel/BUILD.bazel
           fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -233,7 +237,7 @@ jobs:
             echo "ZRAM patch completed"
           fi
           cd ./common
-          if [[ "${{ github.event.inputs.CONFIG_FILE }}" == "oneplus_13" || "${{ github.event.inputs.CONFIG_FILE }}" == "oneplus_ace5_pro" ]]; then
+          if [[ "${{ github.event.inputs.CONFIG_FILE }}" == "oneplus_13" || "${{ github.event.inputs.CONFIG_FILE }}" == "oneplus_ac5_pro" ]]; then
             sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
             sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
           fi
@@ -251,7 +255,7 @@ jobs:
       - name: Apply VFS
         run: |
           cd kernel_workspace/kernel_platform/common
-          if [ "${{ github.event.outputs.VFS }}" = "true" ]; then
+          if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
             cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
             echo "Applying VFS patches"
             patch -p1 -F 3 < syscall_hooks.patch
@@ -280,6 +284,8 @@ jobs:
           # Enable ThinLTO explicitly
           echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
           echo "CONFIG_LTO_CLANG_THIN=y" >> "$CONFIG_FILE"
+          # Disable full LTO to avoid conflicts
+          echo "CONFIG_LTO_CLANG_FULL=n" >> "$CONFIG_FILE"
           echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
           echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
           if [ "${{ github.event.inputs.VFS }}" = "false" ]; then
@@ -335,7 +341,7 @@ jobs:
             echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_CONG_HTCP=y" >> "$CONFIG_FILE"
-            echo encanta"CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
             echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
             echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
             echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
@@ -366,7 +372,7 @@ jobs:
                 sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./common/modules.bzl"
               fi
               if [ -e ./msm-kernel/modules.bzl ]; then
-                sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko "mm\/zsmalloc\.ko",//g' "./msm-kernel/modules.bzl"
+                sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./msm-kernel/modules.bzl"
                 echo "CONFIG_ZSMALLOC=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.PROCESSOR_CODE }}-GKI.config"
                 echo "CONFIG_ZRAM=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.PROCESSOR_CODE }}-GKI.config"
               fi
@@ -386,13 +392,15 @@ jobs:
           fi
           # Ensure LTO=thin in build.config for fallback build
           echo "LTO=thin" >> ./common/build.config.gki
+          # Add -flto=thin to KBUILD_CFLAGS
+          echo "KBUILD_CFLAGS += -flto=thin" >> ./common/build.config.gki
 
       - name: Build kernel
         if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
           echo "Building kernel with LTO=thin for CPU=${{ github.event.inputs.CPU }}"
-          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.PROCESSOR_CODE }} ${{ github.event.inputs.BUILD_METHOD }}
+          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.PROCESSOR_CODE }} ${{ github.event.inputs.BUILD_METHOD }} --lto=thin
           echo "Build completed"
 
       - name: Fallback build kernel
@@ -428,7 +436,9 @@ jobs:
           if [ -f "$BUILD_LOG" ] && grep -q "lto=thin" "$BUILD_LOG"; then
             echo "LTO=thin confirmed in Bazel build log"
           else
-            echo "Warning: lto=thin not found in Bazel build log"
+            echo "Error: lto=thin not found in Bazel build log"
+            cat "$BUILD_LOG" | grep -i "lto" || echo "No LTO-related entries in bazel.log"
+            exit 1
           fi
 
       - name: Make AnyKernel3
