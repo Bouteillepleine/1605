@@ -43,7 +43,6 @@ on:
           - oneplus_13
           - oneplus_ace5_pro
           - oneplus_13t
-          - GitHub may have a bug and not display the last item, do not use this item
       CPUD:
         type: choice
         description: "Processor Code"
@@ -120,9 +119,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt update && sudo apt upgrade -y
-          sudo apt-get install jq -y
-          sudo apt install -y python3 git curl patch bc bison flex libssl-dev
+          sudo apt-get update && sudo apt-get upgrade -y
+          sudo apt-get install -y python3 git curl patch bc bison flex libssl-dev jq \
+            make gcc clang libelf-dev build-essential zip unzip
+          sudo apt-get clean
 
       - name: Show selected inputs debug
         run: |
@@ -144,21 +144,24 @@ jobs:
 
       - name: Initialize repo and sync
         run: |
-          mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
-          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
-          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+          mkdir -p kernel_workspace && cd kernel_workspace
+          if ! repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1; then
+            echo "Failed to initialize repo. Check if manifest file ${{ github.event.inputs.FEIL }}.xml exists for branch oneplus/${{ github.event.inputs.CPU }}."
+            exit 1
+          fi
+          repo sync -j$(nproc)
+          rm -f kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports to remove."
+          rm -f kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports to remove."
 
       - name: Force remove -dirty suffix
         run: |
           cd kernel_workspace/kernel_platform
-          sed -i 's/ -dirty//g' common/scripts/setlocalversion
-          sed -i 's/ -dirty//g' msm-kernel/scripts/setlocalversion
-          sed -i 's/ -dirty//g' external/dtc/scripts/setlocalversion
-          sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
+          sed -i 's/ -dirty//g' common/scripts/setlocalversion || true
+          sed -i 's/ -dirty//g' msm-kernel/scripts/setlocalversion || true
+          sed -i 's/ -dirty//g' external/dtc/scripts/setlocalversion || true
+          sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion || true
           git add -A
-          git commit -m "Force remove -dirty suffix from kernel version"
+          git commit -m "Force remove -dirty suffix from kernel version" || true
 
       - name: Set up KernelSU Next
         if: github.event.inputs.KSUNEXT_ENABLED == 'true'
@@ -170,7 +173,7 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
 
-      - name: Set up susfs
+      - name: Set up SUSFS
         if: github.event.inputs.SUSFS_ENABLED == 'true'
         run: |
           cd kernel_workspace
@@ -180,169 +183,168 @@ jobs:
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./KernelSU-Next/
           cp ../kernel_patches/next/syscall_hooks.patch ./common/
-          cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
-          cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-
-          # Apply patches
+          cp -r ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp -r ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+          # Apply patches with error handling
           cd ./KernelSU-Next
-          patch -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch || true
-          cd ../common
-          patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-
-          # Replace next_hooks.patch with syscall_hooks.patch
-          cp ../../kernel_patches/69_hide_stuff.patch ./
-          patch -p1 -F 3 < 69_hide_stuff.patch
-          patch -p1 -F 3 < syscall_hooks.patch
-
-      - name: Apply new hook and add configuration
-        run: |
-          cd kernel_workspace/kernel_platform
-          echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_WITH_KPROBES=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
-          # Add additional tmpfs config setting
-          echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # ── Additional Netfilter Options ──
-          echo "CONFIG_WIREGUARD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP_NF_NAT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # ── Strip debug to reduce size ──
-          echo "CONFIG_DEBUG_KERNEL=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DYNAMIC_DEBUG=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_TCP_CONG_CDG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_CUBIC=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_CDG=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_DEFAULT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo 'CONFIG_DEFAULT_NET_SCH="fq"' >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_HTB=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_PRIO=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_SFQ=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_TBF=y" >> ./common/arch/arm64/configs/gki_defconfig         
-          # ── ECN config setting ──
-          echo "CONFIG_IP_NF_TARGET_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          sed -i '2s/check_defconfig//' ./common/build.config.gki
-
-      - name: Build kernel
-        if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
-        run: |
-          cd kernel_workspace
-          LTO=thin ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
-
-      - name: Fallback build kernel
-        if: ${{ github.event.inputs.CPU != 'sm8650' && github.event.inputs.CPU != 'sm7675' }}
-        run: |
-          cd kernel_workspace
-          LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
-
-      - name: Make AnyKernel3
-        run: |
-          git clone https://github.com/Numbersf/AnyKernel3 --depth=1
-          rm -rf ./AnyKernel3/.git
-
-          dir1="./kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
-          dir2="./kernel_workspace/kernel_platform/common/out/arch/arm64/boot/"
-          dir3="./kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
-          target1="./AnyKernel3/"
-          target2="./kernel_workspace/kernel"
-
-          # Find VIEW
-          if find "$dir1" -name "Image" | grep -q "Image"; then
-            image_path="$dir1"Image
-          elif find "$dir2" -name "Image" | grep -q "Image"; then
-            image_path="$dir2"Image
-          elif find "$dir3" -name "Image" | grep -q "Image"; then
-            image_path="$dir3"Image
-          else
-            image_path=$(find "./kernel_workspace/kernel_platform/common/out/" -name "Image" | head -n 1)
+          if ! patch -p1 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch; then
+            echo "Failed to apply KernelSU-Next SUSFS patch"
+            exit 1
           fi
-
-          # Copy Image
-          if [ -n "$image_path" ] && [ -f "$image_path" ]; then
-            mkdir -p "$dir1"
-            if [ "$(realpath "$image_path")" != "$(realpath "$dir1"Image)" ]; then
-              cp "$image_path" "$dir1"
-            else
-              echo "Source and destination are the same, skipping copy"
-            fi
-            cp "$dir1"Image ./AnyKernel3/Image
-          else
-            echo "Image file not found, build may fail"
+          cd ../common
+          if ! patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch; then
+            echo "Failed to apply SUSFS GKI patch"
+            exit 1
+          fi
+          cp ../../kernel_patches/69_hide_stuff.patch ./
+          if ! patch -p1 -F 3 < 69_hide_stuff.patch; then
+            echo "Failed to apply hide stuff patch"
+            exit 1
+          fi
+          if ! patch -p1 -F 3 < syscall_hooks.patch; then
+            echo "Failed to apply syscall hooks patch"
             exit 1
           fi
 
-          # Optionally copy other new files (if they exist)
+      - name: Apply kernel configuration
+        run: |
+          cd kernel_workspace/kernel_platform
+          CONFIG_FILE="./common/arch/arm64/configs/gki_defconfig"
+          cat << EOF >> $CONFIG_FILE
+# KernelSU and SUSFS
+CONFIG_KSU=y
+CONFIG_KSU_WITH_KPROBES=n
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_SU=n
+
+# TMPFS settings
+CONFIG_TMPFS_XATTR=y
+CONFIG_TMPFS_POSIX_ACL=y
+
+# Netfilter and networking
+CONFIG_WIREGUARD=y
+CONFIG_IP_NF_NAT=y
+CONFIG_IP_NF_TARGET_TTL=y
+CONFIG_IP6_NF_TARGET_HL=y
+CONFIG_IP6_NF_MATCH_HL=y
+CONFIG_IP_NF_TARGET_ECN=y
+CONFIG_IP_ECN=y
+CONFIG_TCP_ECN=y
+CONFIG_IPV6_ECN=y
+
+# Strip debug to reduce size
+CONFIG_DEBUG_KERNEL=n
+CONFIG_DYNAMIC_DEBUG=n
+CONFIG_DEBUG_INFO=n
+
+# TCP congestion control
+CONFIG_TCP_CONG_ADVANCED=y
+CONFIG_TCP_CONG_BBR=y
+CONFIG_DEFAULT_TCP_CONG="bbr"
+CONFIG_TCP_CONG_CDG=y
+CONFIG_DEFAULT_BBR=y
+CONFIG_DEFAULT_CUBIC=n
+CONFIG_DEFAULT_CDG=n
+
+# Network scheduling
+CONFIG_NET_SCH_DEFAULT=y
+CONFIG_DEFAULT_FQ=y
+CONFIG_DEFAULT_NET_SCH="fq"
+CONFIG_NET_SCH_HTB=y
+CONFIG_NET_SCH_PRIO=y
+CONFIG_NET_SCH_SFQ=y
+CONFIG_NET_SCH_TBF=y
+EOF
+          # Disable defconfig check
+          sed -i 's/check_defconfig//g' ./common/build.config.gki || true
+
+      - name: Build kernel
+        run: |
+          cd kernel_workspace
+          export LTO=thin
+          if [[ "${{ github.event.inputs.CPU }}" == "sm8650" || "${{ github.event.inputs.CPU }}" == "sm7675" ]]; then
+            if ! ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}; then
+              echo "Bazel build failed with LTO=thin, retrying without LTO"
+              unset LTO
+              ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
+            fi
+          else
+            if ! ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}; then
+              echo "Oplus build failed with LTO=thin, retrying without LTO"
+              unset LTO
+              ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
+            fi
+          fi
+
+      - name: Prepare AnyKernel3
+        run: |
+          git clone https://github.com/Numbersf/AnyKernel3 --depth=1
+          rm -rf ./AnyKernel3/.git
+          # Find kernel Image
+          IMAGE_PATH=$(find ./kernel_workspace/kernel_platform -name "Image" -type f | head -n 1)
+          if [ -z "$IMAGE_PATH" ]; then
+            echo "Kernel Image not found. Build likely failed."
+            exit 1
+          fi
+          cp "$IMAGE_PATH" ./AnyKernel3/Image
+          # Copy additional files for sm8750
           if [ "${{ github.event.inputs.CPU }}" = "sm8750" ]; then
+            BASE_DIR="./kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
             for file in dtbo.img system_dlkm.erofs.img vendor_dlkm.img vendor_boot.img; do
-              if [ -f "$dir1$file" ]; then
+              if [ -f "$BASE_DIR$file" ]; then
                 target_name="$file"
-                # Special handling for system_dlkm.erofs.img target name
-                if [ "$file" = "system_dlkm.erofs.img" ]; then
-                  target_name="system_dlkm.img"
-                fi
-                cp "$dir1$file" "./AnyKernel3/$target_name"
+                [ "$file" = "system_dlkm.erofs.img" ] && target_name="system_dlkm.img"
+                cp "$BASE_DIR$file" "./AnyKernel3/$target_name"
               else
-                echo "$file does not exist, skipping copy"
+                echo "$file not found, skipping."
               fi
             done
           fi
 
-      - name: Download Latest SUSFS Module from CI
-        if: ${{ github.event.inputs.SUSFS_CI == 'true' }}
+      - name: Download SUSFS Module
         run: |
-          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
-            jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
-
-          if [ -z "$LATEST_RUN_ID" ]; then
-            echo "No successful run found for branch v1.5.2+"
-            exit 1
+          if [ "${{ github.event.inputs.SUSFS_CI }}" == "true" ]; then
+            if [ -z "${{ secrets.GITHUB_TOKEN }}" ]; then
+              echo "GITHUB_TOKEN not set, falling back to release download"
+              wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
+            else
+              LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
+                jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
+              if [ -z "$LATEST_RUN_ID" ]; then
+                echo "No successful CI run found, falling back to release"
+                wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
+              else
+                ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                  "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
+                curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs_1.5.2+_CI.zip "$ARTIFACT_URL"
+              fi
+            fi
+          else
+            wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
           fi
-
-          ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
-
-          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs_1.5.2+_CI.zip "$ARTIFACT_URL"
-          cp ksu_module_susfs_1.5.2+_CI.zip ./AnyKernel3/
-
-      - name: Download Latest SUSFS Module from Release
-        if: ${{ github.event.inputs.SUSFS_CI == 'false' }}
-        run: |
-          wget -O ksu_module_susfs_1.5.2+_Release.zip https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
-          cp ksu_module_susfs_1.5.2+_Release.zip ./AnyKernel3/
+          cp ksu_module_susfs_1.5.2+_*.zip ./AnyKernel3/
 
       - name: Remove _uv suffix from FEIL
         id: feil_clean
         run: |
           clean_feil="${{ github.event.inputs.FEIL }}"
-          clean_feil="${clean_feil%_v}"  # Remove trailing _v (if any)
-          clean_feil="${clean_feil%_u}"  # Remove trailing _u (if any)
+          clean_feil="${clean_feil%_v}"  # Remove trailing _v
+          clean_feil="${clean_feil%_u}"  # Remove trailing _u
           echo "value=$clean_feil" >> $GITHUB_OUTPUT
 
       - name: Upload AnyKernel3
