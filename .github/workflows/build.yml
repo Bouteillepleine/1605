@@ -116,20 +116,19 @@ jobs:
           $REPO --version
           $REPO --trace sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
       
-      - name: Add KernelSU Next
+      - name: Add KernelSU
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform"
           
-          echo "Adding KernelSU Next..."
-          
-          if [ "${{ inputs.ksun_branch }}" == "stable" ]; then
-            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-          else
-            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s ${{ inputs.ksun_branch }}
-          fi
+          echo "Adding KernelSU..."
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs-dev
           
           git submodule update --init --recursive
+          cd KernelSU-Next/kernel
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10198)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
 
       - name: Apply SUSFS Patches
         run: |
@@ -145,57 +144,32 @@ jobs:
           
           cd ./KernelSU-Next
           
-          if [ "${{ inputs.ksun_branch }}" == "stable" ] || [ "${{ inputs.ksun_branch }}" == "next" ]; then
-            echo "Applying next SUSFS patches..."
-            cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./ksun_susfs_latest.patch
-            patch -p1 --forward < ksun_susfs_latest.patch || true
-          fi
-          
-          # Determine base version based on branch
-          if [ "${{ inputs.ksun_branch }}" == "stable" ]; then
-            BASE_VERSION=10200
-          elif [ "${{ inputs.ksun_branch }}" == "next" ]; then
-            BASE_VERSION=10200
-          elif [ "${{ inputs.ksun_branch }}" == "next-susfs" ]; then
-            BASE_VERSION=10198
-          elif [ "${{ inputs.ksun_branch }}" == "next-susfs-dev" ]; then
-            BASE_VERSION=10198
-          else
-            BASE_VERSION=10200
-          fi
-           
-          cd ./kernel
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
-          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+          #echo "Applying next SUSFS patches..."
+          #cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
+          #patch -p1 --fuzz=3 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch
           
           # Change to common directory and apply SUSFS patch
-          cd ../../common
+          cd ../common
           if [ "${{ inputs.soc }}" == "sun" ]; then
             sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace/hooks/fs.h>' ./fs/namespace.c
           fi
-          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+          patch -p1 --fuzz=3 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
 
       - name: Apply KSUN Hooks
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
-          echo "Applying KSUN Hooks..."
+          # Apply additional patch
           cp ../../../kernel_patches/next/syscall_hooks.patch ./
           patch -p1 --fuzz=3 < ./syscall_hooks.patch
-          
+
       - name: Apply Hide Stuff Patches
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
           # Apply additional patch
           cp ../../../kernel_patches/69_hide_stuff.patch ./
-          patch -p1 -F 3 < 69_hide_stuff.patch
-          # Apply lz4.zstd patch
-          #curl -o 001-lz4.patch https://raw.githubusercontent.com/ferstar/kernel_manifest/realme/sm8650/patches/001-lz4.patch
-          #patch -p1 < 001-lz4.patch || true
-          #curl -o 002-zstd.patch https://raw.githubusercontent.com/ferstar/kernel_manifest/realme/sm8650/patches/002-zstd.patch
-          #patch -p1 < 002-zstd.patch || true
+          patch -p1 --fuzz=3 < 69_hide_stuff.patch
 
       - name: Add SUSFS Configuration Settings
         run: |
@@ -203,11 +177,10 @@ jobs:
           cd "$CONFIG/kernel_platform"
           
           echo "Adding configuration settings to gki_defconfig..."
-          
+
           # Add KSU configuration settings
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_WITH_KPROBES=n" >> ./common/arch/arm64/configs/gki_defconfig
-          
+          echo "CONFIG_KSU_WITH_KPROBES=n" >> ./common/arch/arm64/configs/gki_defconfig          
           # Add SUSFS configuration settings
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
