@@ -1,4 +1,4 @@
-name: Build OnePlus_13rc
+name: Build OnePlus_13r
 on:
   workflow_dispatch:
     inputs:
@@ -76,50 +76,29 @@ jobs:
         run: |
           git config --global user.name "ychenxuan"
           git config --global user.email "3494167979@qq.com"
-
       - name: Install Dependencies
         run: |
           sudo apt update && sudo apt upgrade -y
           sudo apt install -y python3 git curl
-
       - name: Install Repo Tool
         run: |
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
-          
-      - name: Initialize repo and sync
+      - name: Initialize Repo and Sync
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          wget https://github.com/reigadegr/Action-Build/raw/gki_official/fengchi.patch
           wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
+          cat black_module.patch
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync
-          cp -r ./*patch kernel_platform/common
-          if [  -e kernel_platform/common/BUILD.bazel ]; then
-            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/common/BUILD.bazel
-          fi
-          if [  -e kernel_platform/msm-kernel/BUILD.bazel ]; then
-            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/msm-kernel/BUILD.bazel
-          fi
+          repo sync
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
-          
-      - name: Remove OnePlus Kernel Module
-        run: |
-          
-          cd kernel_workspace/kernel_platform/common
-          # wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
-          git apply black_module.patch
-          # Remove check_defconfig
-          sed -i 's/check_defconfig//' ./build.config.gki
-          echo "Kernel module removal completed"                      
-
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
@@ -128,7 +107,6 @@ jobs:
           elif [[ "${{ github.event.inputs.kernelsu_version }}" == "main" ]]; then
             echo "BRANCH=-s susfs-dev" >> $GITHUB_ENV
           fi
-
       - name: Add SukiSU-Ultra
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' }}
         run: |
@@ -139,7 +117,6 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-
       - name: Add SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
@@ -150,7 +127,6 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-
       - name: Apply SUSFS Patches for SukiSU
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
@@ -165,14 +141,6 @@ jobs:
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
           echo "Completed"
-
-      - name: Remove OnePlus Kernel Modules
-        run: |
-          cd kernel_workspace/common
-          wget https://raw.githubusercontent.com/reigadegr/Action-Build/gki_official/rm_oplus_kmodules.patch
-          git apply ./rm_oplus_kmodules.patch
-          echo "O+ removed!"
-
       - name: Apply Hide Stuff Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
@@ -180,7 +148,6 @@ jobs:
           #cp ../../SukiSU_patch/69_hide_stuff.patch ./
           #echo "Applying hide app patch"
           #patch -p1 -F 3 < 69_hide_stuff.patch
-
       - name: Apply New Hooks Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
@@ -189,7 +156,6 @@ jobs:
           echo "Applying VFS patch"
           patch -p1 -F 3 < syscall_hooks.patch
           echo "Completed"
-
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform
@@ -250,7 +216,6 @@ jobs:
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
-
       - name: Add Make Name
         run: |
           cd kernel_workspace/kernel_platform
@@ -258,12 +223,10 @@ jobs:
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-
       - name: Build Kernel
         run: |
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
-
       - name: Generate Kernel Images
         run: |
           cd kernel_workspace/kernel_platform/dist
@@ -273,7 +236,6 @@ jobs:
           ./patch_linux
           mv oImage Image_kpm     
           mv Image_original Image
-
       - name: Prepare AnyKernel3 Packages
         run: |
           cd kernel_workspace/kernel_platform/dist
@@ -281,19 +243,16 @@ jobs:
           git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm --depth=1
           rm -rf AnyKernel3-{kpm,no_kpm}/.git
           rm -f AnyKernel3-{kpm,no_kpm}/push.sh
-
       - name: Copy Images to Corresponding Directories and Rename to Image
         run: |
           cd kernel_workspace/kernel_platform/dist
           cp Image AnyKernel3-no_kpm/Image       
           cp Image_kpm AnyKernel3-kpm/Image
-
       - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
         run: |
           cd kernel_workspace/kernel_platform/dist
           cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
           cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
