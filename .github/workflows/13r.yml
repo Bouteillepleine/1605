@@ -1,4 +1,4 @@
-name: Build OnePlus_13r LTO Thin
+name: Build OnePlus_13r
 on:
   workflow_dispatch:
     inputs:
