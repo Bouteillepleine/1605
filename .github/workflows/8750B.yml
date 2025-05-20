@@ -206,41 +206,26 @@ jobs:
          mv Image_original Image
       - name: Prepare AnyKernel3 Packages
         run: |
-         cd kernel_workspace/kernel_platform/dist
-         # Map FEIL to AnyKernel3 repository name
-         if [ "${{ github.event.inputs.FEIL }}" = "oneplus_ace5_pro" ]; then
-           REPO_NAME="AnyKernel3-ace5Pro"
-         elif [ "${{ github.event.inputs.FEIL }}" = "oneplus_13" ]; then
-           REPO_NAME="AnyKernel3-oneplus13"
-         elif [ "${{ github.event.inputs.FEIL }}" = "oneplus_13t" ]; then
-           REPO_NAME="AnyKernel3-oneplus13t"
-         fi
-         git clone https://github.com/egcd123/$REPO_NAME.git AnyKernel3-no_kpm --depth=1
-         git clone https://github.com/egcd123/$REPO_NAME.git AnyKernel3-kpm --depth=1
-         rm -rf AnyKernel3-{no_kpm,kpm}/.git
-         rm -f AnyKernel3-{no_kpm,kpm}/push.sh
-
-      - name: Copy Images to Respective Directories and Standardize Name
-        run: |
-         cd kernel_workspace/kernel_platform/dist
-         cp Image AnyKernel3-no_kpm/Image
-         cp Image_kpm AnyKernel3-kpm/Image
-
-      - name: Create ZIP Packages (Preserving AnyKernel3 Folder Structure)
+          cd kernel_workspace/kernel_platform/dist
+          git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm --depth=1
+          git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm --depth=1
+          rm -rf AnyKernel3-{kpm,no_kpm}/.git
+          rm -f AnyKernel3-{kpm,no_kpm}/push.sh
+      - name: Copy Images to Corresponding Directories and Rename to Image
         run: |
           cd kernel_workspace/kernel_platform/dist
-          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}.zip . && cd ..
-          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}.zip . && cd ..
-      - name: Create and Upload Release
-        uses: softprops/action-gh-release@v1
+          cp Image AnyKernel3-no_kpm/Image       
+          cp Image_kpm AnyKernel3-kpm/Image
+      - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
+        run: |
+          cd kernel_workspace/kernel_platform/dist
+          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
+          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
+      - name: Upload Kernel Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event.inputs.FEIL }}
-          name: Build for ${{ github.event.inputs.FEIL }}
-          body: sukisu, with kpm, with lz4kd
-          draft: false
-          prerelease: false
-          files: |
-            kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}.zip
-            kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          name: kernel-artifacts
+          path: |
+            kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
+            kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+
