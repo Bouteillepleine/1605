@@ -55,6 +55,7 @@ on:
           - enable
           - disable
         default: enable
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -75,17 +76,22 @@ jobs:
         run: |
           git config --global user.name "ychenxuan"
           git config --global user.email "3494167979@qq.com"
+
       - name: Install Dependencies
         run: |
           sudo apt update && sudo apt upgrade -y
           sudo apt install -y python3 git curl
+
       - name: Install Repo Tool
         run: |
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
+          export PATH=/usr/local/bin:$PATH
+
       - name: Initialize Repo and Sync
         run: |
+          export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
           repo sync
@@ -94,7 +100,7 @@ jobs:
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
-      
+
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
@@ -103,7 +109,7 @@ jobs:
           elif [[ "${{ github.event.inputs.kernelsu_version }}" == "main" ]]; then
             echo "BRANCH=-s susfs-dev" >> $GITHUB_ENV
           fi
-          
+
       - name: Add SukiSU-Ultra
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' }}
         run: |
@@ -114,6 +120,7 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+
       - name: Add SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
@@ -124,7 +131,7 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-          
+
       - name: Apply SUSFS Patches for SukiSU
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
@@ -132,16 +139,14 @@ jobs:
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
           cd kernel_platform
-          # Copy SUSFS patches
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          
           echo "Applying SUSFS patches to the kernel"
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
           echo "Completed"
-          
+
       - name: Apply Hide Stuff Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
@@ -149,7 +154,7 @@ jobs:
           #cp ../../SukiSU_patch/69_hide_stuff.patch ./
           #echo "Applying hide app patch"
           #patch -p1 -F 3 < 69_hide_stuff.patch
-         
+
       - name: Apply New Hooks Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
@@ -158,24 +163,20 @@ jobs:
           echo "Applying VFS patch"
           patch -p1 -F 3 < syscall_hooks.patch
           echo "Completed"
+
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform
-          # Add KSU configuration settings
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          
           if [[ "${{ github.event.inputs.kernelsu_variant }}" == "SukiSU-Ultra" ]]; then
             echo "CONFIG_KPM=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
-          # Add VFS configuration settings
           if [[ "${{ github.event.inputs.VFS_patch_ENABLED }}" == 'enable' ]]; then
             echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./common/arch/arm64/configs/gki_defconfig
           else
             echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
-          
-          # Add SUSFS configuration settings
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -222,8 +223,8 @@ jobs:
           echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
+
       - name: Add Make Name
         run: |
           cd kernel_workspace/kernel_platform
@@ -231,12 +232,12 @@ jobs:
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-  
+
       - name: Build Kernel
         run: |
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
-         
+
       - name: Generate Kernel Images
         run: |
           cd kernel_workspace/kernel_platform/dist
@@ -246,6 +247,7 @@ jobs:
           ./patch_linux
           mv oImage Image_kpm     
           mv Image_original Image
+
       - name: Prepare AnyKernel3 Packages
         run: |
           cd kernel_workspace/kernel_platform/dist
@@ -253,28 +255,23 @@ jobs:
           git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm --depth=1
           rm -rf AnyKernel3-{kpm,no_kpm}/.git
           rm -f AnyKernel3-{kpm,no_kpm}/push.sh
-    
+
       - name: Copy Images to Corresponding Directories and Rename to Image
         run: |
           cd kernel_workspace/kernel_platform/dist
           cp Image AnyKernel3-no_kpm/Image       
           cp Image_kpm AnyKernel3-kpm/Image
-            
+
       - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
         run: |
           cd kernel_workspace/kernel_platform/dist
           cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
           cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-      - name: Create and Upload Release
-        uses: softprops/action-gh-release@v1
+
+      - name: Upload Kernel Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: 13r
-          name: Build for 13r
-          body: SukiSU, with KPM, with LZ4KD
-          draft: false
-          prerelease: false
-          files: |
+          name: kernel-artifacts
+          path: |
             kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
             kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
