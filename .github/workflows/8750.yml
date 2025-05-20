@@ -239,4 +239,3 @@ jobs:
         with:
          name: Image_SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
          path: kernel_workspace/kernel_platform/dist/Image
-```
