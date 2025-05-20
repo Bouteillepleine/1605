@@ -145,10 +145,7 @@ jobs:
           sudo mv ~/repo /usr/local/bin/repo
       - name: Initialize repo and sync
         run: |
-          mkdir kernel_workspace && cd kernel_workspace
-          wget https://github.com/reigadegr/Action-Build/raw/gki_official/fengchi.patch
-          wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
-          cat black_module.patch
+          mkdir kernel_workspace && cd kernel_workspace          
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
           repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync
           cp -r ./*patch kernel_platform/common
@@ -351,7 +348,7 @@ jobs:
             fi
           fi
       - name: Build kernel
-        if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
+        if: ${{ github.event.inputs.CPU == 'sm8750' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
           ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
