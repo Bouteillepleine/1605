@@ -88,20 +88,37 @@ jobs:
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
-
-      - name: Initialize Repo and Sync
+          
+      - name: Initialize repo and sync
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
+          wget https://github.com/reigadegr/Action-Build/raw/gki_official/fengchi.patch
           wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
-          cat black_module.patch
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --force-sync
+          cp -r ./*patch kernel_platform/common
+          if [  -e kernel_platform/common/BUILD.bazel ]; then
+            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/common/BUILD.bazel
+          fi
+          if [  -e kernel_platform/msm-kernel/BUILD.bazel ]; then
+            sed -i '/^[[:space:]]*"protected_exports_list"[[:space:]]*:[[:space:]]*"android\/abi_gki_protected_exports_aarch64",$/d' kernel_platform/msm-kernel/BUILD.bazel
+          fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
+          
+      - name: Remove OnePlus Kernel Module
+        run: |
+          
+          cd kernel_workspace/kernel_platform/common
+          # wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
+          git apply black_module.patch
+          # Remove check_defconfig
+          sed -i 's/check_defconfig//' ./build.config.gki
+          echo "Kernel module removal completed"                      
 
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
