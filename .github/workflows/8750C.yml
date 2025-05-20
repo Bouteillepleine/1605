@@ -237,12 +237,13 @@ jobs:
       - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
         run: |
           cd kernel_workspace/kernel_platform/dist
-          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
+          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_${{ inputs.CPU }}.zip . && cd ..
+          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_${{ inputs.CPU }}.zip . && cd ..
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-artifacts
           path: |
-            kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
-            kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+            kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_${{ inputs.CPU }}.zip
+            kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_${{ inputs.CPU }}.zip
+
