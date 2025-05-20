@@ -1,4 +1,4 @@
-name: Build OnePlus_13r
+name: Build OnePlus_13rc
 on:
   workflow_dispatch:
     inputs:
@@ -148,6 +148,13 @@ jobs:
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
           echo "Completed"
+
+      - name: Remove OnePlus Kernel Modules
+        run: |
+          cd kernel_workspace/common
+          wget https://raw.githubusercontent.com/reigadegr/Action-Build/gki_official/rm_oplus_kmodules.patch
+          git apply ./rm_oplus_kmodules.patch
+          echo "O+ removed!"
 
       - name: Apply Hide Stuff Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
