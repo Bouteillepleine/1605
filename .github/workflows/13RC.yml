@@ -100,6 +100,12 @@ jobs:
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
 
+      - name: Fix gki_defconfig permissions
+        run: |
+          chmod 644 arch/arm64/configs/gki_defconfig
+          git add arch/arm64/configs/gki_defconfig
+          git commit -m "Fix permissions for gki_defconfig" || echo "No permission changes to commit"
+
       - name: OnePlus
         run: |
           cd kernel_workspace/kernel_platform/common
