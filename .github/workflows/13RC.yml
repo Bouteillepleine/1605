@@ -103,9 +103,17 @@ jobs:
       - name: OnePlus
         run: |
           cd kernel_workspace/kernel_platform/common
-          git apply ../../rm_oplus_kmodules.patch
-          # Remove check_defconfig
-          # sed -i 's/check_defconfig//' ./build.config.gki
+          # Fix file permissions for gki_defconfig
+          chmod 644 arch/arm64/configs/gki_defconfig
+          # Apply patch with fuzz factor to tolerate minor differences
+          git apply --reject --whitespace=fix -v ../../rm_oplus_kmodules.patch || {
+              echo "Patch failed to apply cleanly. Checking for rejects..."
+            if ls *.rej >/dev/null 2>&1; then
+              echo "Patch rejected. Please inspect .rej files for conflicts:"
+              cat *.rej
+              exit 1
+            fi
+          }
           echo "oplus applied"
           
       - name: Configure SukiSU-Ultra & SukiSU Version
