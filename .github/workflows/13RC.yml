@@ -103,7 +103,8 @@ jobs:
       - name: OnePlus
         run: |
           cd kernel_workspace/kernel_platform/common
-          git apply rm_oplus_kmodules.patch
+          # Use correct relative path to the patch
+          git apply ../../rm_oplus_kmodules.patch
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./build.config.gki
           echo "oplus applied"
