@@ -90,7 +90,7 @@ jobs:
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          wget https://github.com/Bouteillepleine/kernel_patches/blob/main/next/rm_oplus_kmodules.patch
+          wget https://raw.githubusercontent.com/Bouteillepleine/kernel_patches/main/next/rm_oplus_kmodules.patch
           cat rm_oplus_kmodules.patch
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
           repo sync
