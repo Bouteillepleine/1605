@@ -121,6 +121,8 @@ jobs:
               echo "Patch failed but no .rej files found. Check patch compatibility."
               exit 1
             fi
+          }
+          echo "oplus applied"
           
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
