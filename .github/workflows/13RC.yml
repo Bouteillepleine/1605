@@ -90,8 +90,8 @@ jobs:
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
-          cat black_module.patch
+          wget https://github.com/Bouteillepleine/kernel_patches/blob/main/next/rm_oplus_kmodules.patch
+          cat rm_oplus_kmodules.patch
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
           repo sync
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -99,6 +99,15 @@ jobs:
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
+
+      - name: Remove OnePlus Kernel Module
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          git rm_oplus_kmodules.patch
+          # Remove check_defconfig
+          sed -i 's/check_defconfig//' ./build.config.gki
+          echo "oplus applied"
+          
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
