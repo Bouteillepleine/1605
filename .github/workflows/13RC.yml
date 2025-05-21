@@ -105,16 +105,22 @@ jobs:
           cd kernel_workspace/kernel_platform/common
           # Fix file permissions for gki_defconfig
           chmod 644 arch/arm64/configs/gki_defconfig
-          # Apply patch with fuzz factor to tolerate minor differences
+          # Log the relevant section of gki_defconfig for debugging
+          echo "Current gki_defconfig content around line 67:"
+          sed -n '60,75p' arch/arm64/configs/gki_defconfig
+          # Apply patch with fuzz factor and verbose output
           git apply --reject --whitespace=fix -v ../../rm_oplus_kmodules.patch || {
-              echo "Patch failed to apply cleanly. Checking for rejects..."
+            echo "Patch failed to apply cleanly. Checking for rejects..."
             if ls *.rej >/dev/null 2>&1; then
-              echo "Patch rejected. Please inspect .rej files for conflicts:"
+              echo "Patch rejected. Contents of .rej file(s):"
               cat *.rej
+              echo "Patch content for reference:"
+              cat ../../rm_oplus_kmodules.patch
+              exit 1
+            else
+              echo "Patch failed but no .rej files found. Check patch compatibility."
               exit 1
             fi
-          }
-          echo "oplus applied"
           
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
