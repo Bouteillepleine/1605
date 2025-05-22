@@ -160,15 +160,25 @@ jobs:
           fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
-      - name: Remove OnePlus Kernel Module
+      - name: OnePlus
         run: |
-          
           cd kernel_workspace/kernel_platform/common
-          # wget https://github.com/reigadegr/Action-Build/raw/suki/black_module.patch
-          git apply black_module.patch
-          # Remove check_defconfig
-          sed -i 's/check_defconfig//' ./build.config.gki
-          echo "Kernel module removal completed"
+          # Fix file permissions for gki_defconfig
+          chmod 644 arch/arm64/configs/gki_defconfig
+          # Log the relevant section of gki_defconfig for debugging
+          echo "Current gki_defconfig content around line 67:"
+          sed -n '60,75p' arch/arm64/configs/gki_defconfig
+          # Manually apply the module_blacklist to CONFIG_CMDLINE
+            sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
+            # Verify the change
+            echo "Updated gki_defconfig content around line 67:"
+            sed -n '50,100p' arch/arm64/configs/gki_defconfig
+            # Check if module_blacklist was applied
+            if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
+              echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
+              exit 1
+            fi
+            echo "oplus applied"
           
       - name: Add fengchi
         run: |
@@ -261,6 +271,16 @@ jobs:
             patch -p1 -F 3 < syscall_hooks.patch
             echo "VFS patches applied"
           fi
+          
+      - name: Add sched_ext
+        run: |
+         cd kernel_workspace/kernel_platform/common
+         git clone https://github.com/Bouteillepleine/docker.git
+         cp -r ./sched_ext/* ./common/kernel/sched
+         rm -rf ./sched_ext/.git
+         cd common/kernel/sched
+         sed -i.bak '/# include "ext.c"/a\# include "hmbird_sched_proc_main.c"\n#endif\n\n#ifdef CONFIG_SLIM_SCHED\n# include "slim_sysctl.c"' build_policy.c
+          
       - name: Apply LZ4KD
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -370,6 +390,7 @@ jobs:
               echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
             fi
           fi
+      
       - name: Build kernel
         if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
