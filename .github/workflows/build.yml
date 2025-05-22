@@ -164,13 +164,13 @@ jobs:
           
           cd ./KernelSU-Next
           
-          echo "Applying manager SUSFS patches..."
+          echo "Applying kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch..."
           #cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
           #patch -p1 --fuzz=3 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch
-          curl -Ls "https://raw.githubusercontent.com/KOWX712/files/main/0001-ksun-susfs157.patch" | patch -p1 --fuzz=3
-          curl -Ls https://github.com/KernelSU-Next/KernelSU-Next/commit/30707682565083e497485edc4d7764924e2d042f.patch | patch -p1 --fuzz=3
-          curl -Ls https://github.com/KernelSU-Next/KernelSU-Next/commit/1ac3a3a112abae73801fd52fe32ea8749407ff8d.patch | patch -p1 --fuzz=3
-          
+          git clone https://github.com/Bouteillepleine/kernel_patches.git 
+          cp ../../../kernel_patches/next/fix_kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
+          patch -p1 --fuzz=3 < fix_kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch
+                  
           # Change to common directory and apply SUSFS patch
           cd ../common
           if [ "${{ inputs.soc }}" == "sun" ]; then
