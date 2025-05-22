@@ -183,7 +183,7 @@ jobs:
       - name: Add fengchi
         run: |
           cd kernel_workspace/kernel_platform/common
-          # wget https://github.com/reigadegr/Action-Build/raw/gki_official/fengchi.patch
+          wget https://github.com/reigadegr/Action-Build/raw/gki_official/fengchi.patch
           git apply fengchi.patch
           echo "Fengchi patch applied successfully"
 
