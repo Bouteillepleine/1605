@@ -115,26 +115,6 @@ jobs:
           # Sync repo and apply patches
           $REPO --version
           $REPO --trace sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
-
-      - name: OnePlus
-        run: |
-          cd ${{ env.CONFIG }}/msm-kernel/common  # Adjust based on actual directory
-          # Fix file permissions for gki_defconfig
-            chmod 644 arch/arm64/configs/gki_defconfig
-          # Log the relevant section of gki_defconfig for debugging
-          echo "Current gki_defconfig content around line 67:"
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig
-          # Manually apply the module_blacklist to CONFIG_CMDLINE
-            sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
-            # Verify the change
-            echo "Updated gki_defconfig content around line 67:"
-            sed -n '50,100p' arch/arm64/configs/gki_defconfig
-          # Check if module_blacklist was applied
-          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
-            exit 1
-          fi
-          echo "oplus applied"
       
       - name: Add KernelSU
         run: |
