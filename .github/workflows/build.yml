@@ -118,9 +118,9 @@ jobs:
 
       - name: OnePlus
         run: |
-          cd kernel_workspace/kernel_platform/common
+          cd ${{ env.CONFIG }}/msm-kernel/common  # Adjust based on actual directory
           # Fix file permissions for gki_defconfig
-          chmod 644 arch/arm64/configs/gki_defconfig
+            chmod 644 arch/arm64/configs/gki_defconfig
           # Log the relevant section of gki_defconfig for debugging
           echo "Current gki_defconfig content around line 67:"
           sed -n '60,75p' arch/arm64/configs/gki_defconfig
@@ -129,12 +129,12 @@ jobs:
             # Verify the change
             echo "Updated gki_defconfig content around line 67:"
             sed -n '50,100p' arch/arm64/configs/gki_defconfig
-            # Check if module_blacklist was applied
-            if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-              echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
-              exit 1
-            fi
-            echo "oplus applied"
+          # Check if module_blacklist was applied
+          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
+            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
+            exit 1
+          fi
+          echo "oplus applied"
       
       - name: Add KernelSU
         run: |
