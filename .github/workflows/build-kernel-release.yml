@@ -18,7 +18,7 @@ on:
         type: choice
         options:
           - stable
-          - next-susfs-dev        
+          - next    
         default: next
       bbr_enable:
         description: "bbr?"
