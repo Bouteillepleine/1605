@@ -162,13 +162,11 @@ jobs:
           cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           
-          cd ./KernelSU-Next
-          
+          cd ./KernelSU-Next    
+
           echo "Applying kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch..."
-          #cp ../../../kernel_patches/next/kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
-          #patch -p1 --fuzz=3 < kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch
-          git clone https://github.com/Bouteillepleine/kernel_patches.git 
-          cp ../../../kernel_patches/next/fix_kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
+          git clone https://github.com/Bouteillepleine/kernel_patches.git
+          cp kernel_patches/next/fix_kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch ./
           patch -p1 --fuzz=3 < fix_kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch
                   
           # Change to common directory and apply SUSFS patch
