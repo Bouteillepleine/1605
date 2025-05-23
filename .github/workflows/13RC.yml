@@ -71,8 +71,6 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-          remove-powershell: 'true'
-          remove-swift: 'true'
 
       - name: Configure Git & Install Dependencies
         run: |
@@ -82,8 +80,8 @@ jobs:
           echo "DEBIAN_FRONTEND=noninteractive" >> $GITHUB_ENV
           sudo apt update -y
           sudo apt-mark hold firefox
-          sudo apt upgrade -y -o Dpkg::Options::"--force-confold"
-          sudo apt install -y python3 python-is-python3 git git-lfs curl patch
+          sudo apt upgrade -y -o Dpkg::Options::=--force-confold > apt_upgrade.log 2>&1 || { cat apt_upgrade.log; echo "Error: apt upgrade failed"; exit 1; }
+          sudo apt install -y python3 python-is-python3 git git-lfs curl patch > apt_install.log 2>&1 || { cat apt_install.log; echo "Error: apt install failed"; exit 1; }
           git lfs install
           df -h
 
@@ -279,6 +277,9 @@ jobs:
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_WITH_KPROBES=n
+          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_KSU_MANUAL_HOOK=y
+          CONFIG_KSU_WITH_KPROBES=n
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -303,7 +304,7 @@ jobs:
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_DEBUG_KERNEL=n
-          CONFIG_DYNAMIC_DEBUG=n  
+          CONFIG_DYNAMIC_DEBUG=n
           CONFIG_DEBUG_INFO=n
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
@@ -316,7 +317,7 @@ jobs:
           CONFIG_DEFAULT_FQ=y
           CONFIG_DEFAULT_NET_SCH="fq"
           CONFIG_NET_SCH_HTB=n
-          CONFIG_NET_SCH_PRIO=y
+          CONFIG_NET_SCH_PRIO=n
           CONFIG_NET_SCH_SFQ=y
           CONFIG_NET_SCH_TBF=y
           CONFIG_TCP_CONG_BIC=n
