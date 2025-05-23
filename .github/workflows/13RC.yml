@@ -91,6 +91,9 @@ jobs:
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git "$PLATFORM/prebuilts/clang/host/linux-x86/clang-r522817" || { echo "Clang clone failed"; exit 1; }
+          echo "Listing contents of $COMMON to verify structure:"
+          ls -la "$PATH" || echo "Warning: $COMMON directory not found or empty"
           repo sync
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
