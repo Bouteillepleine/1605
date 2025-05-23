@@ -144,8 +144,6 @@ jobs:
           cat repo_projects.txt
           ls -la "$PLATFORM" || { echo "Error: $PLATFORM directory not found"; exit 1; }
           ls -la "$COMMON" || { echo "Error: $COMMON directory not found"; ls -la "$PLATFORM"; exit 1; }
-          mkdir -p "$PLATFORM/prebuilts/clang/host/linux-x86"
-          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git "$PLATFORM/prebuilts/clang/host/linux-x86/clang-r522817" || { echo "Error: Clang clone failed"; exit 1; }
           rm $COMMON/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm $PLATFORM/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i 's/ -dirty//g' $COMMON/scripts/setlocalversion
@@ -277,9 +275,6 @@ jobs:
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_WITH_KPROBES=n
-          CONFIG_KSU_SUSFS_SUS_SU=n
-          CONFIG_KSU_MANUAL_HOOK=y
-          CONFIG_KSU_WITH_KPROBES=n
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -304,7 +299,7 @@ jobs:
           CONFIG_IP6_NF_TARGET_HL=y
           CONFIG_IP6_NF_MATCH_HL=y
           CONFIG_DEBUG_KERNEL=n
-          CONFIG_DYNAMIC_DEBUG=n
+          CONFIG_DYNAMIC_DEBUG=n  
           CONFIG_DEBUG_INFO=n
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
@@ -411,3 +406,4 @@ jobs:
           path: |
             ${{ env.PLATFORM }}/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
             ${{ env.PLATFORM }}/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+```
