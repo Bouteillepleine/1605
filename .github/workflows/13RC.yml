@@ -107,9 +107,8 @@ jobs:
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          echo "Checking available branches:" > branch_check.log
-          git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep oneplus >> branch_check.log
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 > repo_init.log 2>&1 || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+          repo sync
           if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
             echo "Manifest content:" > manifest.log
             cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> manifest.log
