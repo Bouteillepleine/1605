@@ -177,17 +177,34 @@ jobs:
 
       - name: Clone Kernel Repository
         run: |
-          mkdir -p ${{ github.workspace }}/logs
-          mkdir -p ${{ github.workspace }}/kernel_workspace/kernel_platform
-          echo "Checking kernel repository availability:" > ${{ github.workspace }}/logs/dir_structure.log
-          git ls-remote https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650 oneplus/sm8650_v_15.0.0_oneplus_ace5 >> ${{ github.workspace }}/logs/dir_structure.log || echo "Error: Branch oneplus/sm8650_v_15.0.0_oneplus_ace5 not found" >> ${{ github.workspace }}/logs/dir_structure.log
-          git clone --depth=1 -b oneplus/sm8650_v_15.0.0_oneplus_ace5 https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650 ${{ github.workspace }}/kernel_workspace/kernel_platform/common 2>&1 | tee -a ${{ github.workspace }}/logs/dir_structure.log || { echo "Error: Failed to clone kernel repository" >> ${{ github.workspace }}/logs/dir_structure.log; exit 1; }
-          if [ ! -d "${{ github.workspace }}/kernel_workspace/kernel_platform/common" ]; then
-            echo "Error: kernel_platform/common directory not found after cloning" >> ${{ github.workspace }}/logs/dir_structure.log
-            ls -la ${{ github.workspace }}/kernel_workspace/kernel_platform >> ${{ github.workspace }}/logs/dir_structure.log
+          mkdir -p /home/runner/work/1605/1605/logs
+          mkdir -p /home/runner/work/1605/1605/kernel_workspace/kernel_platform
+          echo "Checking kernel repository availability:" > /home/runner/work/1605/1605/logs/dir_structure.log
+          git ls-remote https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650 oneplus/sm8650_v_15.0.0_oneplus_ace5 >> /home/runner/work/1605/1605/logs/dir_structure.log || echo "Error: Branch oneplus/sm8650_v_15.0.0_oneplus_ace5 not found" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          git clone --depth=1 -b oneplus/sm8650_v_15.0.0_oneplus_ace5 https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650 /home/runner/work/1605/1605/kernel_workspace/kernel_platform/common 2>&1 | tee -a /home/runner/work/1605/1605/logs/dir_structure.log || { echo "Error: Failed to clone kernel repository" >> /home/runner/work/1605/1605/logs/dir_structure.log; exit 1; }
+          if [ ! -d "/home/runner/work/1605/1605/kernel_workspace/kernel_platform/common" ]; then
+            echo "Error: kernel_platform/common directory not found after cloning" >> /home/runner/work/1605/1605/logs/dir_structure.log
+            ls -la /home/runner/work/1605/1605/kernel_workspace/kernel_platform >> /home/runner/work/1605/1605/logs/dir_structure.log
             exit 1
           fi
-          if [ ! -f "${{ github.workspace }}/ bensì
+          if [ ! -f "/home/runner/work/1605/1605/kernel_workspace/kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
+            echo "Error: gki_defconfig not found in kernel_platform/common/arch/arm64/configs/" >> /home/runner/work/1605/1605/logs/dir_structure.log
+            ls -la /home/runner/work/1605/1605/kernel_workspace/kernel_platform/common/arch/arm64/configs/ || echo "configs directory not found" >> /home/runner/work/1605/1605/logs/dir_structure.log
+            exit 1
+          fi
+          if [ ! -d "/home/runner/work/1605/1605/kernel_workspace/kernel_platform/msm-kernel" ]; then
+            echo "Warning: kernel_platform/msm-kernel directory not found, creating empty directory" >> /home/runner/work/1605/1605/logs/dir_structure.log
+            mkdir -p /home/runner/work/1605/1605/kernel_workspace/kernel_platform/msm-kernel
+          fi
+          rm /home/runner/work/1605/1605/kernel_workspace/kernel_platform/common/android/abi_gki_protected_exports_* 2>/dev/null || echo "No protected exports in common!" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          rm /home/runner/work/1605/1605/kernel_workspace/kernel_platform/msm-kernel/android/abi_gki_protected_exports_* 2>/dev/null || echo "No protected exports in msm-kernel!" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          sed -i 's/ -dirty//g' /home/runner/work/1605/1605/kernel_workspace/kernel_platform/common/scripts/setlocalversion 2>/dev/null || echo "No setlocalversion script in common" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          sed -i 's/ -dirty//g' /home/runner/work/1605/1605/kernel_workspace/kernel_platform/msm-kernel/scripts/setlocalversion 2>/dev/null || echo "No setlocalversion script in msm-kernel" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          sed -i 's/ -dirty//g' /home/runner/work/1605/1605/kernel_workspace/kernel_platform/external/dtc/scripts/setlocalversion 2>/dev/null || echo "No setlocalversion script in dtc" >> /home/runner/work/1605/1605/logs/dir_structure.log
+          echo "Kernel repository cloned" >> /home/runner/work/1605/1605/logs/log_summary.log
+          echo "Current working directory: $(pwd)" >> /home/runner/work/1605/1605/logs/log_summary.log
+          echo "Directory contents: $(ls -la /home/runner/work/1605/1605/kernel_workspace/kernel_platform)" >> /home/runner/work/1605/1605/logs/log_summary.log
+          echo "Logs directory contents: $(ls -la /home/runner/work/1605/1605/logs)" >> /home/runner/work/1605/1605/logs/log_summary.log
           
       - name: OnePlus
         run: |
