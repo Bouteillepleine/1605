@@ -60,11 +60,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Initialize Log Directory
+        run: |
+          mkdir -p logs
+          echo "Log directory initialized at $(date) in $(pwd)" > logs/log_summary.log
+
       - name: Initialize Log Files
         run: |
           mkdir -p logs
-          touch logs/repo_init.log logs/repo_sync.log logs/clang_clone.log logs/manifest.log logs/manifest_projects.log logs/manifest_debug.log logs/dir_structure.log logs/oneplus_config.log logs/repo_version.log logs/branch_check.log logs/log_summary.log
-          echo "Log files initialized at $(date)" > logs/log_summary.log
+          touch logs/repo_init.log logs/repo_sync.log logs/clang_clone.log logs/manifest.log logs/manifest_projects.log logs/manifest_debug.log logs/dir_structure.log logs/oneplus_config.log logs/repo_version.log logs/branch_check.log
+          echo "Log files initialized: $(ls -la logs)" >> logs/log_summary.log
 
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
@@ -84,40 +89,51 @@ jobs:
           path: ~/clang-r522817
           key: clang-r522817-${{ runner.os }}
           restore-keys: clang-r522817-${{ runner.os }}-
+          save-always: true  # Temporary for debugging
 
       - name: Clone Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
+          mkdir -p logs
           mkdir -p ~/clang-r522817
-          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git ~/clang-r522817 || { echo "Error: Clang clone failed"; exit 1; }
-          echo "Clang toolchain cloned successfully" > logs/clang_clone.log
+          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git ~/clang-r522817 || { echo "Error: Clang clone failed" >> logs/clang_clone.log; exit 1; }
+          echo "Clang toolchain cloned successfully" >> logs/clang_clone.log
+          echo "Clang clone completed: $(ls -la ~/clang-r522817)" >> logs/log_summary.log
 
       - name: Copy Clang to Workspace
         run: |
+          mkdir -p logs
           mkdir -p kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86
           cp -r ~/clang-r522817 kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
           echo "Clang copied to workspace: $(ls -la kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86)" >> logs/log_summary.log
 
       - name: Configure Git
         run: |
+          mkdir -p logs
           git config --global user.name "OplusKernelBuilder"
           git config --global user.email "builder@opluskernel.org"
+          echo "Git configured" >> logs/log_summary.log
 
       - name: Install Dependencies
         run: |
+          mkdir -p logs
           sudo apt update && sudo apt upgrade -y
           sudo apt install -y python3 git curl
+          echo "Dependencies installed" >> logs/log_summary.log
 
       - name: Install Repo Tool
         run: |
+          mkdir -p logs
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
           repo --version > logs/repo_version.log
+          echo "Repo tool installed: $(repo --version)" >> logs/log_summary.log
 
       - name: Debug Manifest Repository
         run: |
+          mkdir -p logs
           git clone --depth=1 -b refs/heads/oneplus/${{ github.event.inputs.CPU }} https://github.com/OnePlusOSS/kernel_manifest.git manifest_debug
           echo "Manifest repository contents:" > logs/manifest_debug.log
           ls -la manifest_debug >> logs/manifest_debug.log
@@ -127,16 +143,18 @@ jobs:
           else
             echo "Error: ${{ github.event.inputs.FEIL }}.xml not found in manifest repository" >> logs/manifest_debug.log
           fi
+          echo "Manifest debug completed" >> logs/log_summary.log
 
       - name: Initialize Repo and Sync
         run: |
+          mkdir -p logs
           export PATH=/usr/local/bin:$PATH
           rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
           echo "Starting repo initialization" > logs/repo_init.log
           echo "Checking available branches:" > logs/branch_check.log
           git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> logs/branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> logs/branch_check.log
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee -a logs/repo_init.log || { cat logs/repo_init.log; echo "Error: repo init failed"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee -a logs/repo_init.log || { cat logs/repo_init.log; echo "Error: repo init failed" >> logs/repo_init.log; exit 1; }
           echo "Listing .repo/manifests:" >> logs/manifest.log
           ls -la .repo/manifests >> logs/manifest.log
           if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
@@ -161,7 +179,7 @@ jobs:
           git ls-remote https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 sm8650 >> logs/dir_structure.log || echo "Error: sm8650 branch not found in android_kernel_oneplus_sm8650" >> logs/dir_structure.log
           if [ ! -d "kernel_platform/common" ]; then
             echo "Warning: kernel_platform/common not found, forcing fallback" >> logs/dir_structure.log
-            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee -a logs/dir_structure.log || { echo "Error: Failed to clone kernel repository"; exit 1; }
+            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee -a logs/dir_structure.log || { echo "Error: Failed to clone kernel repository" >> logs/dir_structure.log; exit 1; }
           fi
           if [ ! -d "kernel_platform/common" ]; then
             echo "Error: kernel_platform/common directory still not found after fallback" >> logs/dir_structure.log
@@ -182,9 +200,11 @@ jobs:
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion || echo "No setlocalversion script in common" >> logs/dir_structure.log
           sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion || echo "No setlocalversion script in msm-kernel" >> logs/dir_structure.log
           sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion || echo "No setlocalversion script in dtc" >> logs/dir_structure.log
+          echo "Repo sync completed" >> logs/log_summary.log
 
       - name: OnePlus
         run: |
+          mkdir -p logs
           if [ ! -d "kernel_workspace/kernel_platform/common" ]; then
             echo "Error: kernel_workspace/kernel_platform/common directory not found" > logs/oneplus_config.log
             ls -la kernel_workspace/kernel_platform || echo "kernel_platform directory not found" >> logs/oneplus_config.log
@@ -211,19 +231,23 @@ jobs:
             exit 1
           fi
           echo "oplus applied" >> logs/oneplus_config.log
+          echo "OnePlus config completed" >> logs/log_summary.log
 
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
+          mkdir -p logs
           if [[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]]; then
             echo "BRANCH=-" >> $GITHUB_ENV
           elif [[ "${{ github.event.inputs.kernelsu_version }}" == "main" ]]; then
             echo "BRANCH=-s susfs-dev" >> $GITHUB_ENV
           fi
+          echo "SukiSU version configured: ${{ github.event.inputs.kernelsu_version }}" >> logs/log_summary.log
 
       - name: Add SukiSU-Ultra
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' }}
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash ${{ env.BRANCH }}
           cd ./KernelSU
@@ -231,10 +255,12 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+          echo "SukiSU-Ultra added, version: $KSU_VERSION" >> logs/log_summary.log
 
       - name: Add SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/KernelSU/main/kernel/setup.sh" | bash ${{ env.BRANCH }}
           cd ./KernelSU
@@ -242,10 +268,12 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+          echo "SukiSU added, version: $KSU_VERSION" >> logs/log_summary.log
 
       - name: Apply SUSFS Patches for SukiSU
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
+          mkdir -p logs
           cd kernel_workspace
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
@@ -253,30 +281,34 @@ jobs:
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          echo "Applying SUSFS patches to the kernel"
+          echo "Applying SUSFS patches to the kernel" >> logs/log_summary.log
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-          echo "Completed"
+          echo "SUSFS patches applied" >> logs/log_summary.log
 
       - name: Apply Hide Stuff Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/common
           #cp ../../SukiSU_patch/69_hide_stuff.patch ./
-          #echo "Applying hide app patch"
+          #echo "Applying hide app patch" >> logs/log_summary.log
           #patch -p1 -F 3 < 69_hide_stuff.patch
+          echo "Hide stuff patches skipped (commented out)" >> logs/log_summary.log
 
       - name: Apply New Hooks Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-          echo "Applying VFS patch"
+          echo "Applying VFS patch" >> logs/log_summary.log
           patch -p1 -F 3 < syscall_hooks.patch
-          echo "Completed"
+          echo "VFS patches applied" >> logs/log_summary.log
 
       - name: Add SUSFS Configuration Settings
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
           if [[ "${{ github.event.inputs.kernelsu_variant }}" == "SukiSU-Ultra" ]]; then
@@ -335,22 +367,28 @@ jobs:
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
+          echo "SUSFS config settings added" >> logs/log_summary.log
 
       - name: Add Make Name
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform
           if [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]]; then
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
+          echo "Kernel name modified" >> logs/log_summary.log
 
       - name: Build Kernel
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+          echo "Kernel build completed" >> logs/log_summary.log
 
       - name: Generate Kernel Images
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/dist
           cp Image Image_original
           curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
@@ -358,29 +396,37 @@ jobs:
           ./patch_linux
           mv oImage Image_kpm
           mv Image_original Image
+          echo "Kernel images generated" >> logs/log_summary.log
 
       - name: Prepare AnyKernel3 Packages
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/dist
           git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm --depth=1
           git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm --depth=1
           rm -rf AnyKernel3-{kpm,no_kpm}/.git
           rm -f AnyKernel3-{kpm,no_kpm}/push.sh
+          echo "AnyKernel3 packages prepared" >> logs/log_summary.log
 
       - name: Copy Images to Corresponding Directories and Rename to Image
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/dist
           cp Image AnyKernel3-no_kpm/Image
           cp Image_kpm AnyKernel3-kpm/Image
+          echo "Kernel images copied to AnyKernel3" >> logs/log_summary.log
 
       - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
         run: |
+          mkdir -p logs
           cd kernel_workspace/kernel_platform/dist
           cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
           cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
+          echo "Zip packages created" >> logs/log_summary.log
 
       - name: Verify Log Files
         run: |
+          mkdir -p logs
           echo "Listing log files before upload:" >> logs/log_summary.log
           ls -la logs/*.log >> logs/log_summary.log
           echo "Log file sizes:" >> logs/log_summary.log
@@ -389,6 +435,7 @@ jobs:
 
       - name: Debug Cache Path
         run: |
+          mkdir -p logs
           echo "Checking cache path before cleanup:" >> logs/log_summary.log
           if [ -d "~/clang-r522817" ]; then
             echo "Clang cache path exists: $(ls -la ~/clang-r522817)" >> logs/log_summary.log
@@ -403,6 +450,7 @@ jobs:
           path: |
             kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
             kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+          if-no-files-found: warn
 
       - name: Upload Logs
         if: always()
