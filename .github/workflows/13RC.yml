@@ -500,7 +500,12 @@ jobs:
           mkdir -p ${{ github.workspace }}/logs
           cd ${{ github.workspace }}/kernel_workspace/kernel_platform
           if [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]]; then
-            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+            if [ -f "./build/kernel/kleaf/impl/stamp.bzl" ]; then
+              sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+              echo "Modified stamp.bzl to remove -maybe-dirty" >> ${{ github.workspace }}/logs/log_summary.log
+            else
+              echo "Warning: build/kernel/kleaf/impl/stamp.bzl not found, skipping -maybe-dirty modification" >> ${{ github.workspace }}/logs/log_summary.log
+            fi
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
           echo "Kernel name modified" >> ${{ github.workspace }}/logs/log_summary.log
