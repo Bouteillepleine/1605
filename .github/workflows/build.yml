@@ -2,6 +2,7 @@ name: Build
 permissions:
   contents: write  # Allow writing to repository contents (for pushing tags)
   actions: write   # Allows triggering actions
+
 on:
   workflow_call: # This allows this workflow to be called from another workflow
     inputs:
@@ -100,7 +101,7 @@ jobs:
           # Clone repositories using the branch names
           git clone https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-          git clone https://github.com/TheWildJames/kernel_patches.git          
+          git clone https://github.com/TheWildJames/kernel_patches.git
 
       - name: Initialize and Sync Kernel Source
         run: |
@@ -115,40 +116,48 @@ jobs:
           # Sync repo and apply patches
           $REPO --version
           $REPO --trace sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc --all) --fail-fast
-
-      - name: OnePlus
+          
+      - name: Configure Kernel         
         run: |
+          echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
-          # Fix file permissions for gki_defconfig
           chmod 644 arch/arm64/configs/gki_defconfig
-          # Log the relevant section of gki_defconfig for debugging
-          echo "Current gki_defconfig content around line 67:"
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig
-          # Manually apply the module_blacklist to CONFIG_CMDLINE
-            sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
-            # Verify the change
-            echo "Updated gki_defconfig content around line 67:"
-            sed -n '50,100p' arch/arm64/configs/gki_defconfig
-            # Check if module_blacklist was applied
-            if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-              echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
-              exit 1
-            fi
-            echo "oplus applied"
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
+          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
+            echo "Error: Failed to apply module_blacklist" > oneplus_config.log
+            exit 1
+          fi
+          # Disable additional test modules
+          sed -i -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
+                -e 's/CONFIG_INPUT_KUNIT_TEST=[ym]/CONFIG_INPUT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=[ym]/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_UTILS_KUNIT_TEST=[ym]/CONFIG_SND_SOC_UTILS_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_HID_KUNIT_TEST=[ym]/CONFIG_HID_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_RTC_LIB_KUNIT_TEST=[ym]/CONFIG_RTC_LIB_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_CLK_KUNIT_TEST=[ym]/CONFIG_CLK_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_CLK_GATE_KUNIT_TEST=[ym]/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=[ym]/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_EXT4_KUNIT_TESTS=[ym]/CONFIG_EXT4_KUNIT_TESTS=n/g' \
+                -e 's/CONFIG_FAT_KUNIT_TEST=[ym]/CONFIG_FAT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
+                -e 's/CONFIG_TEST_KMOD=[ym]/CONFIG_TEST_KMOD=n/g' \
+                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \
+            arch/arm64/configs/gki_defconfig
       
-      - name: Add KernelSU
+      - name: Add KernelSU Next
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform"
           
-          echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next
+          echo "Adding KernelSU Next..."
+          
+          if [ "${{ inputs.ksun_branch }}" == "stable" ]; then
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          else
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s ${{ inputs.ksun_branch }}
+          fi
           
           git submodule update --init --recursive
-          cd KernelSU-Next/kernel
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
-          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
 
       - name: Apply SUSFS Patches
         run: |
@@ -162,46 +171,66 @@ jobs:
           cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           
-          cd ./KernelSU-Next    
-
-          echo "Applying kernel-patch-susfs-v1.5.7-to-KernelSU-Next.patch..."
-          git clone https://github.com/Bouteillepleine/kernel_patches.git
-          cp kernel_patches/next/fix_0001_susfs_157_for_ksunext.patch ./
-          patch -p1 --fuzz=3 < fix_0001_susfs_157_for_ksunext.patch
-                  
+          cd ./KernelSU-Next
+          
+          if [ "${{ inputs.ksun_branch }}" == "stable" ] || [ "${{ inputs.ksun_branch }}" == "next" ]; then
+            echo "Applying next SUSFS patches..."
+            cp ../../../kernel_patches/next/0001-kernel-patch-susfs-v1.5.7-to-KernelSU-Next-v1.0.7.patch ./ksun_susfs_latest.patch
+            patch -p1 --forward < ksun_susfs_latest.patch || true
+          fi
+          
+          # Determine base version based on branch
+          case "${{ inputs.ksun_branch }}" in
+            next|stable)
+              BASE_VERSION=10200
+              ;;
+            next-susfs|next-susfs-dev)
+              BASE_VERSION=10198
+              ;;
+            *)
+              BASE_VERSION=10200
+              ;;
+          esac
+          
+          cd ./kernel
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+          
           # Change to common directory and apply SUSFS patch
-          cd ../common
+          cd ../../common
           if [ "${{ inputs.soc }}" == "sun" ]; then
             sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace/hooks/fs.h>' ./fs/namespace.c
           fi
-          patch -p1 --fuzz=3 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
+          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
 
       - name: Apply KSUN Hooks
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
-          # Apply additional patch
+          echo "Applying KSUN Hooks..."
           cp ../../../kernel_patches/next/syscall_hooks.patch ./
           patch -p1 --fuzz=3 < ./syscall_hooks.patch
-
+          
       - name: Apply Hide Stuff Patches
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform/common"
           # Apply additional patch
           cp ../../../kernel_patches/69_hide_stuff.patch ./
-          patch -p1 --fuzz=3 < 69_hide_stuff.patch
+          patch -p1 -F 3 < 69_hide_stuff.patch
 
-      - name: Add SUSFS Configuration Settings
+      - name: Add KernelSU-Next and SUSFS Configuration Settings
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG/kernel_platform"
           
           echo "Adding configuration settings to gki_defconfig..."
-
+          
           # Add KSU configuration settings
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_WITH_KPROBES=n" >> ./common/arch/arm64/configs/gki_defconfig          
+          echo "CONFIG_KSU_KPROBES_HOOK=n" >> ./common/arch/arm64/configs/gki_defconfig
+          
           # Add SUSFS configuration settings
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -224,28 +253,22 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
-          # ── Additional Netfilter Options ──
-          echo "CONFIG_WIREGUARD=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP_NF_NAT=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig      
+      - name: Add BBR Support
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/kernel_platform"
           
-           # ── Strip debug to reduce size ──
-          echo "CONFIG_DEBUG_KERNEL=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DYNAMIC_DEBUG=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig
-
-          if [ "${{ inputs.bbr_enable }}" == "bbr" ]; then
-            echo "Applying bbr configs..."
-    
+          echo "Adding configuration settings to gki_defconfig..."
           echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_BIC=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_WESTWOOD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_HTCP=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_CDG=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_CUBIC=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_CDG=n" >> ./common/arch/arm64/configs/gki_defconfig          
+          echo "CONFIG_DEFAULT_CDG=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_NET_SCH_DEFAULT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo 'CONFIG_DEFAULT_NET_SCH="fq"' >> ./common/arch/arm64/configs/gki_defconfig
@@ -256,26 +279,33 @@ jobs:
           echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_HTCP=y" >> ./common/arch/arm64/configs/gki_defconfig
-
-          # ── ECN config setting ──
           echo "CONFIG_IP_NF_TARGET_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          
-          else
-          echo "No TCP congestion control configured."
-          fi
-          
-      - name: Add sched_ext
+          echo "CONFIG_NET_SCH_FQ_CODEL=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+      - name: Add TTL Target Support
         run: |
-         cd "$CONFIG/kernel_platform"
-         git clone https://github.com/egcd123/sched_ext.git
-         cp -r ./sched_ext/* ./common/kernel/sched
-         rm -rf ./sched_ext/.git
-         cd common/kernel/sched
-         sed -i.bak '/# include "ext.c"/a\# include "hmbird_sched_proc_main.c"\n#endif\n\n#ifdef CONFIG_SLIM_SCHED\n# include "slim_sysctl.c"' build_policy.c
-      
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/kernel_platform"
+          
+          echo "Adding configuration settings to gki_defconfig..."
+          echo "CONFIG_WIREGUARD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_NAT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+      - name: Remove Debug
+        run: |
+          echo "Changing to configuration directory: $CONFIG..."
+          cd "$CONFIG/kernel_platform"
+          
+          echo "CONFIG_DEBUG_KERNEL=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DYNAMIC_DEBUG=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig
+
       - name: Run sed and perl Commands
         run: |
           echo "Changing to configuration directory: $CONFIG..."
@@ -302,10 +332,11 @@ jobs:
           sed -i 's/export REPACK_IMG=true/export REPACK_IMG=false/g' ./oplus/build/oplus_setup.sh
          
           # Run perl command to modify UTS_VERSION
-          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./common/scripts/mkcompile_h
-          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 05 04:20:00 UTC 2025"}' ./msm-kernel/scripts/mkcompile_h
+          DATESTR=$(date -u)
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT $DATESTR"}' ./common/scripts/mkcompile_h
+          perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT $DATESTR"}' ./msm-kernel/scripts/mkcompile_h
           
-          find . -type f -exec sed -i 's/\(make\s\+-C[^\n]*\)\s\+/\1 -j$(nproc) /g' {} +
+          # find . -type f -exec sed -i 's/\(make\s\+-C[^\n]*\)\s\+/\1 -j$(nproc) /g' {} +
 
       - name: Build the Kernel
         run: |
@@ -361,7 +392,7 @@ jobs:
             # cp ./out/dist/vendor_dlkm.img ../AnyKernel3/
             # cp ./out/dist/vendor_boot.img ../AnyKernel3/
           fi
-     
+
       - name: Create ZIP Files for Different Formats
         run: |
           echo "Navigating to AnyKernel3 directory..."
