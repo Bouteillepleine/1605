@@ -107,19 +107,25 @@ jobs:
       - name: Initialize Repo and Sync
         run: |
           export PATH=/usr/local/bin:$PATH
+          rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
           echo "Checking available branches:" > branch_check.log
           git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> branch_check.log
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 > repo_init.log 2>&1 || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
+          echo "Listing .repo/manifests:" >> manifest.log
+          ls -la .repo/manifests >> manifest.log
           if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
-            echo "Manifest content:" > manifest.log
+            echo "Manifest content:" >> manifest.log
             cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> manifest.log
+            if ! grep -q 'kernel_platform/common' .repo/manifests/${{ github.event.inputs.FEIL }}.xml; then
+              echo "Warning: kernel_platform/common not found in manifest, will attempt fallback" >> manifest.log
+            fi
           else
             echo "Error: Manifest file ${{ github.event.inputs.FEIL }}.xml not found" >> manifest.log
             cat repo_init.log
             exit 1
           fi
-          repo sync -j8 --force-sync --fail-fast > repo_sync.log 2>&1 || { cat repo_sync.log; echo "Error: repo sync failed"; exit 1; }
+          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; echo "Error: repo sync failed"; exit 1; }
           echo "Directory structure after repo sync:" > dir_structure.log
           ls -la . >> dir_structure.log
           if [ -d "kernel_platform" ]; then
@@ -128,9 +134,8 @@ jobs:
             echo "Full kernel_platform structure:" >> dir_structure.log
             find kernel_platform -maxdepth 3 >> dir_structure.log
           else
-            echo "Error: kernel_platform directory not found" >> dir_structure.log
-            cat repo_sync.log
-            exit 1
+            echo "Error: kernel_platform directory not found, attempting fallback" >> dir_structure.log
+            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common >> dir_structure.log 2>&1 || { echo "Error: Failed to clone kernel repository"; exit 1; }
           fi
           if [ ! -d "kernel_platform/common" ]; then
             echo "Warning: kernel_platform/common directory not found, checking alternatives" >> dir_structure.log
