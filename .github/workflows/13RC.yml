@@ -107,8 +107,19 @@ jobs:
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 > repo_init.log 2>&1 || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
+          repo sync --force-sync --fail-fast > repo_sync.log 2>&1 || { cat repo_sync.log; echo "Error: repo sync failed"; exit 1; }
+          if [ ! -d "kernel_platform/common" ]; then
+            echo "Error: kernel_platform/common directory not found"
+            ls -la kernel_platform || echo "kernel_platform directory not found"
+            ls -la . || echo "Listing current directory"
+            exit 1
+          fi
+          if [ ! -d "kernel_platform/msm-kernel" ]; then
+            echo "Error: kernel_platform/msm-kernel directory not found"
+            ls -la kernel_platform || echo "kernel_platform directory not found"
+            exit 1
+          fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
@@ -117,18 +128,31 @@ jobs:
 
       - name: OnePlus
         run: |
-          cd kernel_workspace/kernel_platform/common
-          chmod 644 arch/arm64/configs/gki_defconfig
-          echo "Current gki_defconfig content around line 67:"
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
-          echo "Updated gki_defconfig content around line 67:"
-          sed -n '50,100p' arch/arm64/configs/gki_defconfig
-          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
+          if [ ! -d "kernel_workspace/kernel_platform/common" ]; then
+            echo "Error: kernel_workspace/kernel_platform/common directory not found"
+            ls -la kernel_workspace/kernel_platform || echo "kernel_platform directory not found"
+            ls -la kernel_workspace || echo "kernel_workspace directory not found"
+            cat repo_init.log repo_sync.log
             exit 1
           fi
-          echo "oplus applied"
+          cd kernel_workspace/kernel_platform/common
+          if [ ! -f "arch/arm64/configs/gki_defconfig" ]; then
+            echo "Error: gki_defconfig not found in arch/arm64/configs/"
+            ls -la arch/arm64/configs/ || echo "configs directory not found"
+            exit 1
+          fi
+          chmod 644 arch/arm64/configs/gki_defconfig
+          echo "Current gki_defconfig content around line 67:" > oneplus_config.log
+          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
+          echo "Updated gki_defconfig content around line 67:" >> oneplus_config.log
+          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
+          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
+            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE"
+            cat oneplus_config.log
+            exit 1
+          fi
+          echo "oplus applied" >> oneplus_config.log
 
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
@@ -304,3 +328,14 @@ jobs:
           path: |
             kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
             kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            repo_init.log
+            repo_sync.log
+            clang_clone.log
+            oneplus_config.log
