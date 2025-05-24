@@ -108,7 +108,7 @@ jobs:
           path: ~/clang-r522817
           key: clang-r522817-${{ runner.os }}
           restore-keys: clang-r522817-${{ runner.os }}-
-          save-always: true  # Temporary for debugging
+          save-always: true
 
       - name: Clone Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
@@ -160,6 +160,21 @@ jobs:
           echo "Current working directory: $(pwd)" >> ${{ github.workspace }}/logs/log_summary.log
           echo "Logs directory contents: $(ls -la ${{ github.workspace }}/logs)" >> ${{ github.workspace }}/logs/log_summary.log
 
+      - name: Install Bazel
+        run: |
+          mkdir -p ${{ github.workspace }}/logs
+          sudo apt update
+          sudo apt install -y apt-transport-https curl gnupg
+          curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.gpg
+          sudo mv bazel.gpg /etc/apt/trusted.gpg.d/
+          echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
+          sudo apt update
+          sudo apt install -y bazel
+          bazel version >> ${{ github.workspace }}/logs/log_summary.log
+          echo "Bazel installed successfully" >> ${{ github.workspace }}/logs/log_summary.log
+          echo "Current working directory: $(pwd)" >> ${{ github.workspace }}/logs/log_summary.log
+          echo "Logs directory contents: $(ls -la ${{ github.workspace }}/logs)" >> ${{ github.workspace }}/logs/log_summary.log
+
       - name: Clone Kernel Repository
         run: |
           mkdir -p ${{ github.workspace }}/logs
@@ -172,25 +187,8 @@ jobs:
             ls -la ${{ github.workspace }}/kernel_workspace/kernel_platform >> ${{ github.workspace }}/logs/dir_structure.log
             exit 1
           fi
-          if [ ! -f "${{ github.workspace }}/kernel_workspace/kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found in kernel_platform/common/arch/arm64/configs/" >> ${{ github.workspace }}/logs/dir_structure.log
-            ls -la ${{ github.workspace }}/kernel_workspace/kernel_platform/common/arch/arm64/configs/ || echo "configs directory not found" >> ${{ github.workspace }}/logs/dir_structure.log
-            exit 1
-          fi
-          if [ ! -d "${{ github.workspace }}/kernel_workspace/kernel_platform/msm-kernel" ]; then
-            echo "Warning: kernel_platform/msm-kernel directory not found, creating empty directory" >> ${{ github.workspace }}/logs/dir_structure.log
-            mkdir -p ${{ github.workspace }}/kernel_workspace/kernel_platform/msm-kernel
-          fi
-          rm ${{ github.workspace }}/kernel_workspace/kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports in common!" >> ${{ github.workspace }}/logs/dir_structure.log
-          rm ${{ github.workspace }}/kernel_workspace/kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports in msm-kernel!" >> ${{ github.workspace }}/logs/dir_structure.log
-          sed -i 's/ -dirty//g' ${{ github.workspace }}/kernel_workspace/kernel_platform/common/scripts/setlocalversion || echo "No setlocalversion script in common" >> ${{ github.workspace }}/logs/dir_structure.log
-          sed -i 's/ -dirty//g' ${{ github.workspace }}/kernel_workspace/kernel_platform/msm-kernel/scripts/setlocalversion || echo "No setlocalversion script in msm-kernel" >> ${{ github.workspace }}/logs/dir_structure.log
-          sed -i 's/ -dirty//g' ${{ github.workspace }}/kernel_workspace/kernel_platform/external/dtc/scripts/setlocalversion || echo "No setlocalversion script in dtc" >> ${{ github.workspace }}/logs/dir_structure.log
-          echo "Kernel repository cloned" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Current working directory: $(pwd)" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Directory contents: $(ls -la ${{ github.workspace }}/kernel_workspace/kernel_platform)" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Logs directory contents: $(ls -la ${{ github.workspace }}/logs)" >> ${{ github.workspace }}/logs/log_summary.log
-
+          if [ ! -f "${{ github.workspace }}/ bensì
+          
       - name: OnePlus
         run: |
           if [ ! -d "kernel_workspace/kernel_platform/common" ]; then
