@@ -123,19 +123,23 @@ jobs:
             echo "Error: Failed to apply module_blacklist" > oneplus_config.log
             exit 1
           fi
-          sed -i -e 's/CONFIG_REGMAP_KUNIT=m/CONFIG_REGMAP_KUNIT=n/g' \
-           -e 's/CONFIG_INPUT_KUNIT_TEST=m/CONFIG_INPUT_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=m/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_SND_SOC_UTILS_KUNIT_TEST=m/CONFIG_SND_SOC_UTILS_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_HID_KUNIT_TEST=m/CONFIG_HID_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_RTC_LIB_KUNIT_TEST=m/CONFIG_RTC_LIB_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_CLK_KUNIT_TEST=m/CONFIG_CLK_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_CLK_GATE_KUNIT_TEST=m/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=m/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
-           -e 's/CONFIG_EXT4_KUNIT_TESTS=m/CONFIG_EXT4_KUNIT_TESTS=n/g' \
-           -e 's/CONFIG_FAT_KUNIT_TEST=m/CONFIG_FAT_KUNIT_TEST=n/g' \
-           arch/arm64/configs/gki_defconfig
-
+          # Disable additional test modules
+          sed -i -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
+                -e 's/CONFIG_INPUT_KUNIT_TEST=[ym]/CONFIG_INPUT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=[ym]/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_UTILS_KUNIT_TEST=[ym]/CONFIG_SND_SOC_UTILS_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_HID_KUNIT_TEST=[ym]/CONFIG_HID_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_RTC_LIB_KUNIT_TEST=[ym]/CONFIG_RTC_LIB_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_CLK_KUNIT_TEST=[ym]/CONFIG_CLK_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_CLK_GATE_KUNIT_TEST=[ym]/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=[ym]/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_EXT4_KUNIT_TESTS=[ym]/CONFIG_EXT4_KUNIT_TESTS=n/g' \
+                -e 's/CONFIG_FAT_KUNIT_TEST=[ym]/CONFIG_FAT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
+                -e 's/CONFIG_TEST_KMOD=[ym]/CONFIG_TEST_KMOD=n/g' \
+                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \
+            arch/arm64/configs/gki_defconfig
+           
       - name: Configure SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
