@@ -5,7 +5,7 @@ on:
       CPU:
         description: "Branch"
         required: true
-        default: 'refs/heads/oneplus'
+        default: 'sm8650'
       FEIL:
         description: "Configuration File"
         required: true
@@ -102,13 +102,15 @@ jobs:
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
+          repo --version > repo_version.log
 
       - name: Initialize Repo and Sync
         run: |
           export PATH=/usr/local/bin:$PATH
           mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
+          echo "Checking available branches:" > branch_check.log
+          git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> branch_check.log
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 > repo_init.log 2>&1 || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
           if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
             echo "Manifest content:" > manifest.log
             cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> manifest.log
@@ -133,7 +135,6 @@ jobs:
           if [ ! -d "kernel_platform/common" ]; then
             echo "Warning: kernel_platform/common directory not found, checking alternatives" >> dir_structure.log
             ls -la kernel_platform >> dir_structure.log
-            # Try alternative kernel path
             if [ -d "kernel_platform/kernel" ]; then
               echo "Found kernel_platform/kernel, copying to common" >> dir_structure.log
               cp -r kernel_platform/kernel kernel_platform/common
@@ -309,8 +310,8 @@ jobs:
           echo "CONFIG_NET_SCH_DEFAULT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo 'CONFIG_DEFAULT_NET_SCH="fq"' >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_HTB=n" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_NET_SCH_PRIO=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_HTB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_PRIO=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_NET_SCH_SFQ=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_NET_SCH_TBF=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
@@ -385,3 +386,5 @@ jobs:
             manifest.log
             dir_structure.log
             oneplus_config.log
+            repo_version.log
+            branch_check.log
