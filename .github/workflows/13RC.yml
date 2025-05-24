@@ -124,52 +124,21 @@ jobs:
             echo "Error: Failed to apply module_blacklist" > oneplus_config.log
             exit 1
           fi
-          # Disable all test and KUnit-related modules
-          sed -i -e 's/CONFIG_KUNIT=[ym]/CONFIG_KUNIT=n/g' \
-                -e 's/CONFIG_KUNIT_EXAMPLE_TEST=[ym]/CONFIG_KUNIT_EXAMPLE_TEST=n/g' \
-                -e 's/CONFIG_KUNIT_TEST=[ym]/CONFIG_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
-                -e 's/CONFIG_CLK_GATE_KUNIT_TEST=[ym]/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_EXT4_KUNIT_TESTS=[ym]/CONFIG_EXT4_KUNIT_TESTS=n/g' \
-                -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=[ym]/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
-                -e 's/CONFIG_SOC_TOPOLOGY_KUNIT_TEST=[ym]/CONFIG_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SOC_UTILS_KUNIT_TEST=[ym]/CONFIG_SOC_UTILS_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_TIME_KUNIT_TEST=[ym]/CONFIG_TIME_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_LIST_KUNIT_TEST=[ym]/CONFIG_LIST_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_STRING_KUNIT_TEST=[ym]/CONFIG_STRING_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_MEMCPY_KUNIT_TEST=[ym]/CONFIG_MEMCPY_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_OVERFLOW_KUNIT_TEST=[ym]/CONFIG_OVERFLOW_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SLAB_KUNIT_TEST=[ym]/CONFIG_SLAB_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_F2FS_KUNIT_TEST=[ym]/CONFIG_F2FS_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SPI_KUNIT_TEST=[ym]/CONFIG_SPI_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_I2C_KUNIT_TEST=[ym]/CONFIG_I2C_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_DRM_KUNIT_TEST=[ym]/CONFIG_DRM_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_NET_KUNIT_TEST=[ym]/CONFIG_NET_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_RCU_KUNIT_TEST=[ym]/CONFIG_RCU_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_LOCK_TORTURE_TEST=[ym]/CONFIG_LOCK_TORTURE_TEST=n/g' \
-                -e 's/CONFIG_TEST_FIRMWARE=[ym]/CONFIG_TEST_FIRMWARE=n/g' \
-                -e 's/CONFIG_TEST_SYSCTL=[ym]/CONFIG_TEST_SYSCTL=n/g' \
+          # Disable additional test modules
+          sed -i -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
                 -e 's/CONFIG_INPUT_KUNIT_TEST=[ym]/CONFIG_INPUT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=[ym]/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_SND_SOC_UTILS_KUNIT_TEST=[ym]/CONFIG_SND_SOC_UTILS_KUNIT_TEST=n/g' \
                 -e 's/CONFIG_HID_KUNIT_TEST=[ym]/CONFIG_HID_KUNIT_TEST=n/g' \
                 -e 's/CONFIG_RTC_LIB_KUNIT_TEST=[ym]/CONFIG_RTC_LIB_KUNIT_TEST=n/g' \
                 -e 's/CONFIG_CLK_KUNIT_TEST=[ym]/CONFIG_CLK_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_CLK_GATE_KUNIT_TEST=[ym]/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=[ym]/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_EXT4_KUNIT_TESTS=[ym]/CONFIG_EXT4_KUNIT_TESTS=n/g' \
                 -e 's/CONFIG_FAT_KUNIT_TEST=[ym]/CONFIG_FAT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
                 -e 's/CONFIG_TEST_KMOD=[ym]/CONFIG_TEST_KMOD=n/g' \
-                -e 's/CONFIG_BITFIELD_KUNIT_TEST=[ym]/CONFIG_BITFIELD_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_HASHTABLE_KUNIT_TEST=[ym]/CONFIG_HASHTABLE_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_FORTIFY_KUNIT_TEST=[ym]/CONFIG_FORTIFY_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SYNC_KUNIT_TEST=[ym]/CONFIG_SYNC_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_EXFAT_KUNIT_TEST=[ym]/CONFIG_EXFAT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_BTRFS_KUNIT_TEST=[ym]/CONFIG_BTRFS_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_FIB_KUNIT_TEST=[ym]/CONFIG_FIB_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_NETDEV_KUNIT_TEST=[ym]/CONFIG_NETDEV_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_MUTEX_KUNIT_TEST=[ym]/CONFIG_MUTEX_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_LOCKDEP_KUNIT_TEST=[ym]/CONFIG_LOCKDEP_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SCHED_KUNIT_TEST=[ym]/CONFIG_SCHED_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_IRQ_KUNIT_TEST=[ym]/CONFIG_IRQ_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_CRYPTO_KUNIT_TEST=[ym]/CONFIG_CRYPTO_KUNIT_TEST=n/g' \
+                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \            
                 -e 's/CONFIG_RCUTORTURE=[ym]/CONFIG_RCUTORTURE=n/g' \
                 -e 's/CONFIG_CPUTORTURE=[ym]/CONFIG_CPUTORTURE=n/g' \
                 -e 's/CONFIG_MEM_TORTURE_TEST=[ym]/CONFIG_MEM_TORTURE_TEST=n/g' \
