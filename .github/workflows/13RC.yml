@@ -60,6 +60,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Initialize Log Files
+        run: |
+          mkdir -p logs
+          touch logs/repo_init.log logs/repo_sync.log logs/clang_clone.log logs/manifest.log logs/manifest_projects.log logs/manifest_debug.log logs/dir_structure.log logs/oneplus_config.log logs/repo_version.log logs/branch_check.log logs/log_summary.log
+          echo "Log files initialized at $(date)" > logs/log_summary.log
+
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -75,16 +81,22 @@ jobs:
         id: cache-clang
         uses: actions/cache@v4
         with:
-          path: kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
-          key: clang-r522817-${{ runner.os }}-${{ hashFiles('**/clang-r522817/**') }}
+          path: ~/clang-r522817
+          key: clang-r522817-${{ runner.os }}
           restore-keys: clang-r522817-${{ runner.os }}-
 
       - name: Clone Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
+          mkdir -p ~/clang-r522817
+          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git ~/clang-r522817 || { echo "Error: Clang clone failed"; exit 1; }
+          echo "Clang toolchain cloned successfully" > logs/clang_clone.log
+
+      - name: Copy Clang to Workspace
+        run: |
           mkdir -p kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86
-          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817 || { echo "Error: Clang clone failed"; exit 1; }
-          echo "Clang toolchain cloned successfully" > clang_clone.log
+          cp -r ~/clang-r522817 kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
+          echo "Clang copied to workspace: $(ls -la kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86)" >> logs/log_summary.log
 
       - name: Configure Git
         run: |
@@ -102,107 +114,103 @@ jobs:
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
-          repo --version > repo_version.log
+          repo --version > logs/repo_version.log
+
+      - name: Debug Manifest Repository
+        run: |
+          git clone --depth=1 -b refs/heads/oneplus/${{ github.event.inputs.CPU }} https://github.com/OnePlusOSS/kernel_manifest.git manifest_debug
+          echo "Manifest repository contents:" > logs/manifest_debug.log
+          ls -la manifest_debug >> logs/manifest_debug.log
+          if [ -f "manifest_debug/${{ github.event.inputs.FEIL }}.xml" ]; then
+            echo "Content of ${{ github.event.inputs.FEIL }}.xml:" >> logs/manifest_debug.log
+            cat manifest_debug/${{ github.event.inputs.FEIL }}.xml >> logs/manifest_debug.log
+          else
+            echo "Error: ${{ github.event.inputs.FEIL }}.xml not found in manifest repository" >> logs/manifest_debug.log
+          fi
 
       - name: Initialize Repo and Sync
         run: |
           export PATH=/usr/local/bin:$PATH
           rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
-          echo "Checking available branches:" > branch_check.log
-          git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> branch_check.log
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
-          echo "Listing .repo/manifests:" >> manifest.log
-          ls -la .repo/manifests >> manifest.log
+          echo "Starting repo initialization" > logs/repo_init.log
+          echo "Checking available branches:" > logs/branch_check.log
+          git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> logs/branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> logs/branch_check.log
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee -a logs/repo_init.log || { cat logs/repo_init.log; echo "Error: repo init failed"; exit 1; }
+          echo "Listing .repo/manifests:" >> logs/manifest.log
+          ls -la .repo/manifests >> logs/manifest.log
           if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
-            echo "Manifest content:" >> manifest.log
-            cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> manifest.log
+            echo "Manifest content:" >> logs/manifest.log
+            cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> logs/manifest.log
+            echo "Project entries in manifest:" > logs/manifest_projects.log
+            grep '<project' .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> logs/manifest_projects.log || echo "No project entries found" >> logs/manifest_projects.log
             if ! grep -q 'kernel_platform/common' .repo/manifests/${{ github.event.inputs.FEIL }}.xml; then
-              echo "Warning: kernel_platform/common not found in manifest, will attempt fallback" >> manifest.log
+              echo "Warning: kernel_platform/common not found in manifest, will force fallback" >> logs/manifest.log
             fi
           else
-            echo "Error: Manifest file ${{ github.event.inputs.FEIL }}.xml not found" >> manifest.log
-            cat repo_init.log
+            echo "Error: Manifest file ${{ github.event.inputs.FEIL }}.xml not found" >> logs/manifest.log
+            cat logs/repo_init.log
             exit 1
           fi
-          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; echo "Error: repo sync failed"; exit 1; }
-          echo "Directory structure after repo sync:" > dir_structure.log
-          ls -la . >> dir_structure.log
-          if [ -d "kernel_platform" ]; then
-            echo "kernel_platform contents:" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
-            echo "Full kernel_platform structure:" >> dir_structure.log
-            find kernel_platform -maxdepth 3 >> dir_structure.log
-          else
-            echo "Error: kernel_platform directory not found, attempting fallback" >> dir_structure.log
-            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common >> dir_structure.log 2>&1 || { echo "Error: Failed to clone kernel repository"; exit 1; }
+          echo "Starting repo sync" > logs/repo_sync.log
+          repo sync -j8 --force-sync --fail-fast 2>&1 | tee -a logs/repo_sync.log
+          echo "Repo sync exit code: $?" >> logs/repo_sync.log
+          echo "Directory structure after repo sync:" > logs/dir_structure.log
+          ls -la . >> logs/dir_structure.log
+          echo "Checking kernel repository availability:" >> logs/dir_structure.log
+          git ls-remote https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 sm8650 >> logs/dir_structure.log || echo "Error: sm8650 branch not found in android_kernel_oneplus_sm8650" >> logs/dir_structure.log
+          if [ ! -d "kernel_platform/common" ]; then
+            echo "Warning: kernel_platform/common not found, forcing fallback" >> logs/dir_structure.log
+            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee -a logs/dir_structure.log || { echo "Error: Failed to clone kernel repository"; exit 1; }
           fi
           if [ ! -d "kernel_platform/common" ]; then
-            echo "Warning: kernel_platform/common directory not found, checking alternatives" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
-            if [ -d "kernel_platform/kernel" ]; then
-              echo "Found kernel_platform/kernel, copying to common" >> dir_structure.log
-              cp -r kernel_platform/kernel kernel_platform/common
-            elif [ -d "kernel_platform/source" ]; then
-              echo "Found kernel_platform/source, copying to common" >> dir_structure.log
-              cp -r kernel_platform/source kernel_platform/common
-            elif [ -f "kernel_platform/arch/arm64/configs/gki_defconfig" ]; then
-              echo "Found gki_defconfig in kernel_platform, using as common" >> dir_structure.log
-              mkdir -p kernel_platform/common
-              mv kernel_platform/* kernel_platform/common/ || true
-            else
-              echo "No kernel source found, cloning directly" >> dir_structure.log
-              git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common >> dir_structure.log 2>&1 || { echo "Error: Failed to clone kernel repository"; exit 1; }
-            fi
-          fi
-          if [ ! -d "kernel_platform/common" ]; then
-            echo "Error: kernel_platform/common directory still not found after fallback" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
+            echo "Error: kernel_platform/common directory still not found after fallback" >> logs/dir_structure.log
+            ls -la kernel_platform >> logs/dir_structure.log
             exit 1
           fi
           if [ ! -f "kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found in kernel_platform/common/arch/arm64/configs/" >> dir_structure.log
-            ls -la kernel_platform/common/arch/arm64/configs/ || echo "configs directory not found" >> dir_structure.log
+            echo "Error: gki_defconfig not found in kernel_platform/common/arch/arm64/configs/" >> logs/dir_structure.log
+            ls -la kernel_platform/common/arch/arm64/configs/ || echo "configs directory not found" >> logs/dir_structure.log
             exit 1
           fi
           if [ ! -d "kernel_platform/msm-kernel" ]; then
-            echo "Warning: kernel_platform/msm-kernel directory not found, creating empty directory" >> dir_structure.log
+            echo "Warning: kernel_platform/msm-kernel directory not found, creating empty directory" >> logs/dir_structure.log
             mkdir -p kernel_platform/msm-kernel
           fi
-          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports in common!" >> dir_structure.log
-          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports in msm-kernel!" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion || echo "No setlocalversion script in common" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion || echo "No setlocalversion script in msm-kernel" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion || echo "No setlocalversion script in dtc" >> dir_structure.log
+          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports in common!" >> logs/dir_structure.log
+          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports in msm-kernel!" >> logs/dir_structure.log
+          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion || echo "No setlocalversion script in common" >> logs/dir_structure.log
+          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion || echo "No setlocalversion script in msm-kernel" >> logs/dir_structure.log
+          sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion || echo "No setlocalversion script in dtc" >> logs/dir_structure.log
 
       - name: OnePlus
         run: |
           if [ ! -d "kernel_workspace/kernel_platform/common" ]; then
-            echo "Error: kernel_workspace/kernel_platform/common directory not found" > oneplus_config.log
-            ls -la kernel_workspace/kernel_platform || echo "kernel_platform directory not found" >> oneplus_config.log
-            ls -la kernel_workspace || echo "kernel_workspace directory not found" >> oneplus_config.log
-            cat repo_init.log repo_sync.log manifest.log dir_structure.log >> oneplus_config.log
+            echo "Error: kernel_workspace/kernel_platform/common directory not found" > logs/oneplus_config.log
+            ls -la kernel_workspace/kernel_platform || echo "kernel_platform directory not found" >> logs/oneplus_config.log
+            ls -la kernel_workspace || echo "kernel_workspace directory not found" >> logs/oneplus_config.log
+            cat logs/repo_init.log logs/repo_sync.log logs/manifest.log logs/manifest_projects.log logs/manifest_debug.log logs/dir_structure.log >> logs/oneplus_config.log
             exit 1
           fi
           cd kernel_workspace/kernel_platform/common
           if [ ! -f "arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found in arch/arm64/configs/" > oneplus_config.log
-            ls -la arch/arm64/configs/ || echo "configs directory not found" >> oneplus_config.log
-            cat repo_init.log repo_sync.log manifest.log dir_structure.log >> oneplus_config.log
+            echo "Error: gki_defconfig not found in arch/arm64/configs/" >> logs/oneplus_config.log
+            ls -la arch/arm64/configs/ || echo "configs directory not found" >> logs/oneplus_config.log
+            cat logs/repo_init.log logs/repo_sync.log logs/manifest.log logs/manifest_projects.log logs/manifest_debug.log logs/dir_structure.log >> logs/oneplus_config.log
             exit 1
           fi
           chmod 644 arch/arm64/configs/gki_defconfig
-          echo "Current gki_defconfig content around line 67:" >> oneplus_config.log
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
+          echo "Current gki_defconfig content around line 67:" >> logs/oneplus_config.log
+          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> logs/oneplus_config.log
           sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
-          echo "Updated gki_defconfig content around line 67:" >> oneplus_config.log
-          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
+          echo "Updated gki_defconfig content around line 67:" >> logs/oneplus_config.log
+          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> logs/oneplus_config.log
           if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE" >> oneplus_config.log
-            cat oneplus_config.log
+            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE" >> logs/oneplus_config.log
+            cat logs/oneplus_config.log
             exit 1
           fi
-          echo "oplus applied" >> oneplus_config.log
+          echo "oplus applied" >> logs/oneplus_config.log
 
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
@@ -371,6 +379,23 @@ jobs:
           cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
           cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
 
+      - name: Verify Log Files
+        run: |
+          echo "Listing log files before upload:" >> logs/log_summary.log
+          ls -la logs/*.log >> logs/log_summary.log
+          echo "Log file sizes:" >> logs/log_summary.log
+          find logs -name "*.log" -exec wc -c {} \; >> logs/log_summary.log
+          echo "Current working directory: $(pwd)" >> logs/log_summary.log
+
+      - name: Debug Cache Path
+        run: |
+          echo "Checking cache path before cleanup:" >> logs/log_summary.log
+          if [ -d "~/clang-r522817" ]; then
+            echo "Clang cache path exists: $(ls -la ~/clang-r522817)" >> logs/log_summary.log
+          else
+            echo "Clang cache path does not exist: ~/clang-r522817" >> logs/log_summary.log
+          fi
+
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -384,12 +409,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: |
-            repo_init.log
-            repo_sync.log
-            clang_clone.log
-            manifest.log
-            dir_structure.log
-            oneplus_config.log
-            repo_version.log
-            branch_check.log
+          path: logs/*.log
+          if-no-files-found: warn
+          compression-level: 6
+          overwrite: false
+          include-hidden-files: false
