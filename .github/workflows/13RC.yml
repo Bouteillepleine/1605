@@ -206,18 +206,34 @@ jobs:
             exit 1
           fi
           chmod 644 arch/arm64/configs/gki_defconfig
-          echo "Current gki_defconfig content around line 67:" >> oneplus_config.log
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla, cpu_hotplug, crypto_lz4p, ext4_inode_test, f_fs_ipc_log, gzvm, hung_task_enh, iio_test_format, kunit, kunit_example_test, kunit_test, oplus_bsp_dfr_hung_task_enhance, oplus_bsp_dfr_reboot_speed, oplus_bsp_dfr_ubt, oplus_bsp_dynamic_readahead, oplus_bsp_fpga_monitor, oplus_bsp_hybridswap_zram, oplus_bsp_kshrink_slabd, oplus_bsp_kswapd_opt, oplus_bsp_memleak_detect, oplus_bsp_pcppages_opt, oplus_bsp_proactive_compact, oplus_bsp_sigkill_diagnosis, oplus_bsp_storage_io_metrics, oplus_bsp_uxmem_opt, oplus_bsp_waker_identify, oplus_bsp_zram_opt, oplus_bsp_zsmalloc, oplus_lock_torture, oplus_network_kernel_state_monitor, oplus_power_hook, oplus_secure_common, oplus_secure_guard_new, oplus_sys_stability_helper, oplus_wq_dynamic_priority, qcom_cpufreq_thermal, regmap_kunit, soc_topology_test, soc_utils_test, thermal_config, thermal_pause, time_test"/' arch/arm64/configs/gki_defconfig
-          echo "Updated gki_defconfig content around line 67:" >> oneplus_config.log
-          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
-          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
+          echo "Current gki_defconfig content (CONFIG_CMDLINE):" >> oneplus_config.log
+          grep -n "CONFIG_CMDLINE" arch/arm64/configs/gki_defconfig >> oneplus_config.log || echo "CONFIG_CMDLINE not found" >> oneplus_config.log
+          
+          # Define the module blacklist
+          MODULE_BLACKLIST="module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla,cpu_hotplug,crypto_lz4p,ext4_inode_test,f_fs_ipc_log,gzvm,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_dfr_hung_task_enhance,oplus_bsp_dfr_reboot_speed,oplus_bsp_dfr_ubt,oplus_bsp_dynamic_readahead,oplus_bsp_fpga_monitor,oplus_bsp_hybridswap_zram,oplus_bsp_kshrink_slabd,oplus_bsp_kswapd_opt,oplus_bsp_memleak_detect,oplus_bsp_pcppages_opt,oplus_bsp_proactive_compact,oplus_bsp_sigkill_diagnosis,oplus_bsp_storage_io_metrics,oplus_bsp_uxmem_opt,oplus_bsp_waker_identify,oplus_bsp_zram_opt,oplus_bsp_zsmalloc,oplus_lock_torture,oplus_network_kernel_state_monitor,oplus_power_hook,oplus_secure_common,oplus_secure_guard_new,oplus_sys_stability_helper,oplus_wq_dynamic_priority,qcom_cpufreq_thermal,regmap_kunit,soc_topology_test,soc_utils_test,thermal_config,thermal_pause,time_test"
+          
+          # Check if CONFIG_CMDLINE exists
+          if grep -q "^CONFIG_CMDLINE=" arch/arm64/configs/gki_defconfig; then
+            # Remove any existing module_blacklist from CONFIG_CMDLINE
+            sed -i 's/ module_blacklist=[^"]*//' arch/arm64/configs/gki_defconfig
+            # Append the new module_blacklist before the closing quote
+            sed -i "s/\(CONFIG_CMDLINE=\".*\)\"/\1 $MODULE_BLACKLIST\"/" arch/arm64/configs/gki_defconfig
+          else
+            # Add new CONFIG_CMDLINE with the blacklist
+            echo "CONFIG_CMDLINE=\"$MODULE_BLACKLIST\"" >> arch/arm64/configs/gki_defconfig
+          fi
+          
+          echo "Updated gki_defconfig content (CONFIG_CMDLINE):" >> oneplus_config.log
+          grep -n "CONFIG_CMDLINE" arch/arm64/configs/gki_defconfig >> oneplus_config.log || echo "CONFIG_CMDLINE not found after update" >> oneplus_config.log
+          
+          # Verify the blacklist was applied
+          if ! grep -q "module_blacklist=oplus_network_app_monitor" arch/arm64/configs/gki_defconfig; then
             echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE" >> oneplus_config.log
             cat oneplus_config.log
             exit 1
           fi
           echo "oplus applied" >> oneplus_config.log
-
+          
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
