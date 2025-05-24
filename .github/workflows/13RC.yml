@@ -99,21 +99,14 @@ jobs:
       - name: Initialize Repo and Sync
         run: |
           export PATH=/usr/local/bin:$PATH
-          rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; exit 1; }
-          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; exit 1; }
-          if [ ! -d "kernel_platform/common" ]; then
-            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee dir_structure.log || exit 1
-          fi
-          if [ ! -f "kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found" >> dir_structure.log
-            exit 1
-          fi
-          mkdir -p kernel_platform/msm-kernel
-          rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
-          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
-
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+          repo sync
+          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
+          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
+          sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
       - name: Configure Kernel         
         run: |
           cd kernel_workspace/kernel_platform/common
