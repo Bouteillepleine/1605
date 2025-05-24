@@ -193,162 +193,32 @@ jobs:
 
       - name: OnePlus
         run: |
-          mkdir -p ${{ github.workspace }}/logs
-          if [ ! -d "${{ github.workspace }}/logs" ]; then
-            echo "Error: logs directory not found" >> ${{ github.workspace }}/logs/log_summary.log
-            ls -la ${{ github.workspace }} >> ${{ github.workspace }}/logs/log_summary.log
+          if [ ! -d "kernel_workspace/kernel_platform/common" ]; then
+            echo "Error: kernel_workspace/kernel_platform/common directory not found" > oneplus_config.log
+            ls -la kernel_workspace/kernel_platform || echo "kernel_platform directory not found" >> oneplus_config.log
+            ls -la kernel_workspace || echo "kernel_workspace directory not found" >> oneplus_config.log
+            cat repo_init.log repo_sync.log manifest.log dir_structure.log >> oneplus_config.log
             exit 1
           fi
-          if [ ! -d "${{ github.workspace }}/kernel_workspace/kernel_platform/common" ]; then
-            echo "Error: kernel_workspace/kernel_platform/common directory not found" >> ${{ github.workspace }}/logs/oneplus_config.log
-            ls -la ${{ github.workspace }}/kernel_workspace/kernel_platform || echo "kernel_platform directory not found" >> ${{ github.workspace }}/logs/oneplus_config.log
-            ls -la ${{ github.workspace }}/kernel_workspace || echo "kernel_workspace directory not found" >> ${{ github.workspace }}/logs/oneplus_config.log
+          cd kernel_workspace/kernel_platform/common
+          if [ ! -f "arch/arm64/configs/gki_defconfig" ]; then
+            echo "Error: gki_defconfig not found in arch/arm64/configs/" > oneplus_config.log
+            ls -la arch/arm64/configs/ || echo "configs directory not found" >> oneplus_config.log
+            cat repo_init.log repo_sync.log manifest.log dir_structure.log >> oneplus_config.log
             exit 1
           fi
-          cd ${{ github.workspace }}/kernel_workspace/kernel_platform/common
-          # Debug main.c context
-          echo "Searching for early_mod_check in kernel/module/main.c:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          grep -A 5 -B 5 "early_mod_check" kernel/module/main.c >> ${{ github.workspace }}/logs/oneplus_config.log || echo "early_mod_check not found" >> ${{ github.workspace }}/logs/oneplus_config.log
-          echo "Searching for load_module in kernel/module/main.c:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          grep -A 5 -B 5 "load_module" kernel/module/main.c >> ${{ github.workspace }}/logs/oneplus_config.log || echo "load_module not found" >> ${{ github.workspace }}/logs/oneplus_config.log
-          # Create patch file for module blacklist
-          cat > module_blacklist.patch << 'EOF'
-          diff --git a/kernel/module/main.c b/kernel/module/main.c
-          index 48afaf8..9843ac4 100644
-          --- a/kernel/module/main.c
-          +++ b/kernel/module/main.c
-          @@ -1,3 +1,4 @@
-          +/* Module blacklist additions */
-           #include <linux/module.h>
-           #include <linux/moduleloader.h>
-           #include <linux/sched.h>
-          @@ -2860,6 +2861,67 @@ static int early_mod_check(struct load_info *info, int flags)
- 	          if (err)
- 		          return err;
- 
-          +static const char *blocked_modules_dev[] = {
-          +    NULL
-          +};
-          +
-          +static const char *blocked_modules_stable[] = {
-          +    "clk_gate_test",
-          +    "cpu_hotplug",
-          +    "crypto_lz4p",
-          +    "ext4_inode_test",
-          +    "f_fs_ipc_log",
-          +    "gzvm",
-          +    "hung_task_enh",
-          +    "iio_test_format",
-          +    "kunit",
-          +    "kunit_example_test",
-          +    "kunit_test",
-          +    "oplus_bsp_dfr_hung_task_enhance",
-          +    "oplus_bsp_dfr_reboot_speed",
-          +    "oplus_bsp_dfr_ubt",
-          +    "oplus_bsp_dynamic_readahead",
-          +    "oplus_bsp_fpga_monitor",
-          +    "oplus_bsp_hybridswap_zram",
-          +    "oplus_bsp_kshrink_slabd",
-          +    "oplus_bsp_kswapd_opt",
-          +    "oplus_bsp_memleak_detect",
-          +    "oplus_bsp_pcppages_opt",
-          +    "oplus_bsp_proactive_compact",
-          +    "oplus_bsp_sigkill_diagnosis",
-          +    "oplus_bsp_storage_io_metrics",
-          +    "oplus_bsp_uxmem_opt",
-          +    "oplus_bsp_waker_identify",
-          +    "oplus_bsp_zram_opt",
-          +    "oplus_bsp_zsmalloc",
-          +    "oplus_connectivity_routerboost",
-          +    "oplus_lock_torture",
-          +    "oplus_network_app_monitor",
-          +    "oplus_network_dns_hook",
-          +    "oplus_network_game_first",
-          +    "oplus_network_kernel_state_monitor",
-          +    "oplus_network_qr_scan",
-          +    "oplus_network_sched",
-          +    "oplus_network_score",
-          +    "oplus_network_snapshot",
-          +    "oplus_network_stats_calc",
-          +    "oplus_network_tuning",
-          +    "oplus_power_hook",
-          +    "oplus_secure_common",
-          +    "oplus_secure_guard_new",
-          +    "oplus_sys_stability_helper",
-          +    "oplus_wq_dynamic_priority",
-          +    "qcom_cpufreq_thermal",
-          +    "regmap_kunit",
-          +    "soc_topology_test",
-          +    "soc_utils_test",
-          +    "thermal_config",
-          +    "thermal_pause",
-          +    "time_test",
-          +    NULL
-          +};
-          +
-           	return 0;
-           }
- 
-          @@ -2870,6 +2932,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
-           	struct module *mod;
-           	bool module_allocated = false;
-           	long err = 0;
-          +	int i = 0;
-           	char *after_dashes;
- 
-           	/*
-          @@ -2912,6 +2975,19 @@ static int load_module(struct load_info *info, const char __user *uargs,
- 
-           	audit_log_kern_module(mod->name);
- 
-          +	for (i = 0; blocked_modules_dev[i] != NULL; i++) {
-          +		if (strcmp(mod->name, blocked_modules_dev[i]) == 0) {
-          +			pr_warn("Dev: Module %s is blacklisted\n", mod->name);
-          +			goto free_module;
-          +		}
-          +	}
-          +	for (i = 0; blocked_modules_stable[i] != NULL; i++) {
-          +		if (strcmp(mod->name, blocked_modules_stable[i]) == 0) {
-          +			pr_warn("Stable: Module %s is blacklisted\n", mod->name);
-          +			goto free_module;
-          +		}
-          +	}
-          +
-           	/* Reserve our place in the list. */
-           	err = add_unformed_module(mod);
-           	if (err)
-          EOF
-
-          # Debug patch file
-          echo "Patch file contents:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          cat module_blacklist.patch >> ${{ github.workspace }}/logs/oneplus_config.log
-          # Verify file exists
-          if [ ! -f "kernel/module/main.c" ]; then
-            echo "Error: kernel/module/main.c not found" >> ${{ github.workspace }}/logs/oneplus_config.log
-            exit 1
-          fi
-          # Test patch application
-          echo "Testing patch application:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          patch -p1 --dry-run < module_blacklist.patch >> ${{ github.workspace }}/logs/oneplus_config.log 2>&1 || { echo "Error: Patch dry-run failed" >> ${{ github.workspace }}/logs/oneplus_config.log; cat module_blacklist.patch >> ${{ github.workspace }}/logs/oneplus_config.log; exit 1; }
-          # Apply the patch
-          patch -p1 -F 3 < module_blacklist.patch >> ${{ github.workspace }}/logs/oneplus_config.log 2>&1 || { echo "Error: Failed to apply module blacklist patch" >> ${{ github.workspace }}/logs/oneplus_config.log; cat module_blacklist.patch >> ${{ github.workspace }}/logs/oneplus_config.log; exit 1; }
-          echo "Module blacklist patch applied" >> ${{ github.workspace }}/logs/oneplus_config.log
           chmod 644 arch/arm64/configs/gki_defconfig
-          echo "Current gki_defconfig content around line 67:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> ${{ github.workspace }}/logs/oneplus_config.log
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla"/' arch/arm64/configs/gki_defconfig
-          echo "Updated gki_defconfig content around line 67:" >> ${{ github.workspace }}/logs/oneplus_config.log
-          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> ${{ github.workspace }}/logs/oneplus_config.log
+          echo "Current gki_defconfig content around line 67:" >> oneplus_config.log
+          sed -n '60,75p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=oplus_network_app_monitor,oplus_network_linkpower_module,oplus_network_vnet,oplus_network_score,oplus_network_qr_scan,oplus_network_game_first,oplus_network_sched,oplus_network_snapshot,oplus_network_tuning,oplus_network_data_module,oplus_network_stats_calc,oplus_network_dns_hook,oplus_connectivity_routerboost,oplus_connectivity_sla, cpu_hotplug, crypto_lz4p, ext4_inode_test, f_fs_ipc_log, gzvm, hung_task_enh, iio_test_format, kunit, kunit_example_test, kunit_test, oplus_bsp_dfr_hung_task_enhance, oplus_bsp_dfr_reboot_speed, oplus_bsp_dfr_ubt, oplus_bsp_dynamic_readahead, oplus_bsp_fpga_monitor, oplus_bsp_hybridswap_zram, oplus_bsp_kshrink_slabd, oplus_bsp_kswapd_opt, oplus_bsp_memleak_detect, oplus_bsp_pcppages_opt, oplus_bsp_proactive_compact, oplus_bsp_sigkill_diagnosis, oplus_bsp_storage_io_metrics, oplus_bsp_uxmem_opt, oplus_bsp_waker_identify, oplus_bsp_zram_opt, oplus_bsp_zsmalloc, oplus_lock_torture, oplus_network_kernel_state_monitor, oplus_power_hook, oplus_secure_common, oplus_secure_guard_new, oplus_sys_stability_helper, oplus_wq_dynamic_priority, qcom_cpufreq_thermal, regmap_kunit, soc_topology_test, soc_utils_test, thermal_config, thermal_pause, time_test"/' arch/arm64/configs/gki_defconfig
+          echo "Updated gki_defconfig content around line 67:" >> oneplus_config.log
+          sed -n '50,100p' arch/arm64/configs/gki_defconfig >> oneplus_config.log
           if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
-            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE" >> ${{ github.workspace }}/logs/oneplus_config.log
-            cat ${{ github.workspace }}/logs/oneplus_config.log
+            echo "Error: Failed to apply module_blacklist to CONFIG_CMDLINE" >> oneplus_config.log
+            cat oneplus_config.log
             exit 1
           fi
-          echo "oplus applied" >> ${{ github.workspace }}/logs/oneplus_config.log
-          echo "OnePlus config completed" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Current working directory: $(pwd)" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Directory contents: $(ls -la)" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Logs directory contents: $(ls -la ${{ github.workspace }}/logs)" >> ${{ github.workspace }}/logs/log_summary.log
+          echo "oplus applied" >> oneplus_config.log
 
       - name: Configure SukiSU-Ultra & SukiSU Version
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
@@ -571,7 +441,7 @@ jobs:
           echo "Kernel images copied to AnyKernel3" >> ${{ github.workspace }}/logs/log_summary.log
           echo "Current working directory: $(pwd)" >> ${{ github.workspace }}/logs/log_summary.log
           echo "Directory contents: $(ls -la)" >> ${{ github.workspace }}/logs/log_summary.log
-          echo "Logs directory contents: $(ls -la ${{ github.workspace }}/logs)" >> ${{ github.workspace }}/logs/log_summary.log
+          echo "Logs }" >> ${{ github.workspace }}/logs/log_summary.log
 
       - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
         run: |
