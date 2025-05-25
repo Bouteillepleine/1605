@@ -82,12 +82,16 @@ jobs:
       - name: Clone Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
+          set -e
+          set -x
           mkdir -p kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86
           git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817 || exit 1
           echo "Clang toolchain cloned successfully" > clang_clone.log
 
       - name: Install Dependencies and Repo Tool
         run: |
+          set -e
+          set -x
           sudo apt update && sudo apt install -y python3 git curl
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
@@ -95,9 +99,11 @@ jobs:
           git config --global user.name "OplusKernelBuilder"
           git config --global user.email "builder@opluskernel.org"
           repo --version > repo_version.log
-
+          
       - name: Initialize Repo and Sync
         run: |
+          set -e
+          set -x
           export PATH=/usr/local/bin:$PATH
           rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
@@ -116,18 +122,23 @@ jobs:
 
       - name: Configure Kernel
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
           sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,crypto_lz4p,ext4_inode_test,f_fs_ipc_log,gzvm,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,oplus_network_stats_calc,qcom_cpufreq_thermal,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
-
       - name: Clean Build Environment
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform
           tools/bazel clean --expunge
 
       - name: Configure SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform
           if [[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]]; then
             BRANCH=""
@@ -139,10 +150,12 @@ jobs:
           KSU_VERSION=$(expr $(git rev-list --count main) + 10606)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=[0-9]*/DKSU_VERSION=$KSU_VERSION/" kernel/Makefile
-
+          
       - name: Apply SUSFS Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
+          set -e
+          set -x
           cd kernel_workspace
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
@@ -155,12 +168,16 @@ jobs:
       - name: Apply VFS Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
           patch -p1 -F 3 < syscall_hooks.patch
 
       - name: Add SUSFS Configuration Settings
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
           grep -q "^CONFIG_KSU=y" $CONFIG_FILE || echo "CONFIG_KSU=y" >> $CONFIG_FILE
@@ -186,13 +203,7 @@ jobs:
           grep -q "^CONFIG_TMPFS_XATTR=y" $CONFIG_FILE || echo "CONFIG_TMPFS_XATTR=y" >> $CONFIG_FILE
           grep -q "^CONFIG_TMPFS_POSIX_ACL=y" $CONFIG_FILE || echo "CONFIG_TMPFS_POSIX_ACL=y" >> $CONFIG_FILE
           grep -q "^CONFIG_WIREGUARD=y" $CONFIG_FILE || echo "CONFIG_WIREGUARD=y" >> $CONFIG_FILE
-          grep -q "^CONFIG_IP_NF_NAT=y" $CONFIG_FILE || echo "CONFIG_IP_NF_NAT=y" >> $CONFIG_FILE
-          grep -q "^CONFIG_IP_NF_TARGET_TTL=y" $CONFIG_FILE || echo "CONFIG_IP_NF_TARGET_TTL=y" >> $CONFIG_FILE
-          grep -q "^CONFIG_IP6_NF_TARGET_HL=y" $CONFIG_FILE || echo "CONFIG_IP6_NF_TARGET_HL=y" >> $CONFIG_FILE
-          grep -q "^CONFIG_IP6_NF_MATCH_HL=y" $CONFIG_FILE || echo "CONFIG_IP6_NF_MATCH_HL=y" >> $CONFIG_FILE
-          grep -q "^CONFIG_DEBUG_KERNEL=n" $CONFIG_FILE || echo "CONFIG_DEBUG_KERNEL=n" >> $CONFIG_FILE
-          grep -q "^CONFIG_DYNAMIC_DEBUG=n" $CONFIG_FILE || echo "CONFIG_DYNAMIC_DEBUG=n" >> $CONFIG_FILE
-          grep -q "^CONFIG_DEBUG_INFO=n" $CONFIG_FILE || echo "CONFIG_DEBUG_INFO=n" >> $CONFIG_FILE
+          grep -q "^CONFIG_IP_NF_NAT=y" $CONFIG_FILE || echo "CONFIG_IP_NF_NAT=y" >> $CONFIG
           grep -q "^CONFIG_TCP_CONG_ADVANCED=y" $CONFIG_FILE || echo "CONFIG_TCP_CONG_ADVANCED=y" >> $CONFIG_FILE
           grep -q "^CONFIG_TCP_CONG_BBR=y" $CONFIG_FILE || echo "CONFIG_TCP_CONG_BBR=y" >> $CONFIG_FILE
           grep -q "^CONFIG_DEFAULT_TCP_CONG=\"bbr\"" $CONFIG_FILE || echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> $CONFIG_FILE
@@ -218,6 +229,8 @@ jobs:
 
       - name: Add Make Name
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform
           if [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]]; then
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" build/kernel/kleaf/impl/stamp.bzl
@@ -226,11 +239,15 @@ jobs:
 
       - name: Build Kernel
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
 
       - name: Generate Kernel Images
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform/dist
           cp Image Image_original
           curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
@@ -241,6 +258,8 @@ jobs:
 
       - name: Package Kernel
         run: |
+          set -e
+          set -x
           cd kernel_workspace/kernel_platform/dist
           git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm
           git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm
@@ -257,3 +276,4 @@ jobs:
           path: |
             kernel_workspace/kernel_platform/dist/AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip
             kernel_workspace/kernel_platform/dist/AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip
+
