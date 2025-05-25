@@ -59,7 +59,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
@@ -72,110 +71,78 @@ jobs:
           remove-haskell: 'true'
           remove-codeql: 'true'
 
-      - name: Configure Git
+      - name: Setup Environment
         run: |
-          git config --global user.name "ychenxuan"
-          git config --global user.email "3494167979@qq.com"
+          set -ex
+          sudo apt update && sudo apt install -y python3 git curl
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo > /usr/local/bin/repo
+          chmod a+x /usr/local/bin/repo
+          git config --global user.name "ychenxuan" --global user.email "3494167979@qq.com"
 
-      - name: Install Dependencies
-        run: |
-          sudo apt update && sudo apt upgrade -y
-          sudo apt install -y python3 git curl
+      - name: Cache Clang Toolchain
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
+          key: clang-r522817-${{ runner.os }}-${{ hashFiles('**/clang-r522817/**') }}
 
-      - name: Install Repo Tool
+      - name: Clone Clang Toolchain
+        if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
-          chmod a+x ~/repo
-          sudo mv ~/repo /usr/local/bin/repo
-          export PATH=/usr/local/bin:$PATH
+          set -ex
+          mkdir -p kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86
+          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
 
-      - name: Initialize Repo and Sync
+      - name: Initialize and Sync Kernel Source
         run: |
-          export PATH=/usr/local/bin:$PATH
-          mkdir kernel_workspace && cd kernel_workspace
+          set -ex
+          mkdir -p kernel_workspace && cd kernel_workspace
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
-          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
-          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
-          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
-          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
-          sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion
+          repo sync -j8
+          rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
+          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
 
       - name: Configure Kernel
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
-          if ! grep -q 'CONFIG_CMDLINE=' arch/arm64/configs/gki_defconfig; then
-            echo "Error: CONFIG_CMDLINE not found in gki_defconfig" > config_error.log
-            exit 1
-          fi
+          grep -q 'CONFIG_CMDLINE=' arch/arm64/configs/gki_defconfig || { echo "Error: CONFIG_CMDLINE not found"; exit 1; }
           sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=ext4_inode_test,f_fs_ipc_log,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
 
-
-      - name: Configure SukiSU-Ultra & SukiSU Version
+      - name: Configure SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
-          if [[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]]; then
-            echo "BRANCH=-" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.kernelsu_version }}" == "main" ]]; then
-            echo "BRANCH=-s susfs-dev" >> $GITHUB_ENV
-          fi
-
-      - name: Add SukiSU-Ultra
-        if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' }}
-        run: |
+          set -ex
           cd kernel_workspace/kernel_platform
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash ${{ env.BRANCH }}
-          cd ./KernelSU
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10606)
+          REPO=$([[ "${{ github.event.inputs.kernelsu_variant }}" == "SukiSU-Ultra" ]] && echo "ShirkNeko/SukiSU-Ultra" || echo "ShirkNeko/KernelSU")
+          BRANCH=$([[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]] && echo "" || echo "-s susfs-dev")
+          curl -fsSL "https://raw.githubusercontent.com/$REPO/main/kernel/setup.sh" | bash $BRANCH
+          cd KernelSU
+          KSU_VERSION=$(( $(git rev-list --count main) + 10606 ))
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          export KSU_VERSION=$KSU_VERSION
-          sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+          sed -i "s/DKSU_VERSION=[0-9]*/DKSU_VERSION=$KSU_VERSION/" kernel/Makefile
 
-      - name: Add SukiSU
-        if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU' }}
-        run: |
-          cd kernel_workspace/kernel_platform
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/KernelSU/main/kernel/setup.sh" | bash ${{ env.BRANCH }}
-          cd ./KernelSU
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10606)
-          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-          export KSU_VERSION=$KSU_VERSION
-          sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-
-      - name: Apply SUSFS Patches for SukiSU
+      - name: Apply SUSFS Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
+          set -ex
           cd kernel_workspace
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
-          git clone https://github.com/ShirkNeko/SukiSU_patch.git
-          cd kernel_platform
-          cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
-          cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
-          cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          echo "Applying SUSFS patches to the kernel"
-          cd ./common
-          patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
-          echo "Completed"
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+          git clone --depth=1 https://github.com/ShirkNeko/SukiSU_patch.git
+          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch kernel_platform/common/
+          cp susfs4ksu/kernel_patches/fs/* kernel_platform/common/fs/
+          cp susfs4ksu/kernel_patches/include/linux/* kernel_platform/common/include/linux/
+          cd kernel_platform/common
+          patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
 
-      - name: Apply Hide Stuff Patches
-        if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
-        run: |
-          cd kernel_workspace/kernel_platform/common
-          #cp ../../SukiSU_patch/69_hide_stuff.patch ./
-          #echo "Applying hide app patch"
-          #patch -p1 -F 3 < 69_hide_stuff.patch
-
-      - name: Apply New Hooks Patches
+      - name: Apply VFS Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
+          set -ex
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
-          echo "Applying VFS patch"
           patch -p1 -F 3 < syscall_hooks.patch
-          echo "Completed"
 
       - name: Integrate Sched Ext
         run: |
@@ -242,51 +209,39 @@ jobs:
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
-
-      - name: Add Make Name
+          
+      - name: Set Kernel Name
         run: |
+          set -ex
           cd kernel_workspace/kernel_platform
-          if [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]]; then
-            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
-          fi
-          sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
+          [[ "${{ github.event.inputs.KERNEL_VERSION }}" =~ ^(6.1|6.6)$ ]] && sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" build/kernel/kleaf/impl/stamp.bzl
+          sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' common/scripts/setlocalversion
 
       - name: Build Kernel
         run: |
+          set -ex
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
 
-      - name: Generate Kernel Images
+      - name: Generate and Package Kernel
         run: |
+          set -ex
           cd kernel_workspace/kernel_platform/dist
           cp Image Image_original
-          curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
+          curl -fsSL -o patch_linux https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
           chmod +x patch_linux
           ./patch_linux
-          mv oImage Image_kpm     
+          mv oImage Image_kpm
           mv Image_original Image
-
-      - name: Prepare AnyKernel3 Packages
-        run: |
-          cd kernel_workspace/kernel_platform/dist
-          git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm --depth=1
-          git clone https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm --depth=1
-          rm -rf AnyKernel3-{kpm,no_kpm}/.git
-          rm -f AnyKernel3-{kpm,no_kpm}/push.sh
-
-      - name: Copy Images to Corresponding Directories and Rename to Image
-        run: |
-          cd kernel_workspace/kernel_platform/dist
-          cp Image AnyKernel3-no_kpm/Image       
+          git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm
+          git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm
+          rm -rf AnyKernel3-{kpm,no_kpm}/.git AnyKernel3-{kpm,no_kpm}/push.sh
+          cp Image AnyKernel3-no_kpm/
           cp Image_kpm AnyKernel3-kpm/Image
+          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip .
+          cd ../AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip .
 
-      - name: Create Zip Packages (Preserve AnyKernel3 Folder Structure)
-        run: |
-          cd kernel_workspace/kernel_platform/dist
-          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-
-      - name: Upload Kernel Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-artifacts
