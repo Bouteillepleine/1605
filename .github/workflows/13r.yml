@@ -303,7 +303,7 @@ jobs:
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
 		  
-	    - name: Integrate Sched Ext
+      - name: Integrate Sched Ext
         run: |
           set -e
           set -x
