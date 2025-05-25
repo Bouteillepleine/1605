@@ -73,16 +73,9 @@ jobs:
 
       - name: Validate Inputs
         run: |
-          set -e
-          set -x
-          if [[ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.1" && "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ]]; then
-            echo "Error: KERNEL_VERSION must be 6.1 or 6.6"
-            exit 1
-          fi
-          if [[ "${{ github.event.inputs.ANDROID_VERSION }}" != "android14" ]]; then
-            echo "Error: ANDROID_VERSION must be android14"
-            exit 1
-          fi
+          set -ex
+          [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]] || { echo "Error: KERNEL_VERSION must be 6.1 or 6.6"; exit 1; }
+          [[ "${{ github.event.inputs.ANDROID_VERSION }}" == "android14" ]] || { echo "Error: ANDROID_VERSION must be android14"; exit 1; }
 
       - name: Cache Clang Toolchain
         id: cache-clang
@@ -90,48 +83,36 @@ jobs:
         with:
           path: kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
           key: clang-r522817-${{ runner.os }}-${{ hashFiles('**/clang-r522817/**') }}
-          restore-keys: clang-r522817-${{ runner.os }}-
 
       - name: Clone Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
-          set -e
-          set -x
+          set -ex
           mkdir -p kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86
-          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817 || exit 1
-          echo "Clang toolchain cloned successfully" > clang_clone.log
+          git clone --depth=1 https://gitlab.com/kei-space/clang/r522817.git kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r522817
 
-      - name: Install Dependencies and Repo Tool
+      - name: Install Dependencies
         run: |
-          set -e
-          set -x
+          set -ex
           sudo apt update && sudo apt install -y python3 git curl
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
-          git config --global user.name "OplusKernelBuilder"
-          git config --global user.email "builder@opluskernel.org"
-          repo --version > repo_version.log
+          git config --global user.name "OplusKernelBuilder" --global user.email "builder@opluskernel.org"
 
-      - name: Initialize Repo and Sync
+      - name: Initialize and Sync Kernel Source
         run: |
-          set -e
-          set -x
+          set -ex
           export PATH=/usr/local/bin:$PATH
           rm -rf kernel_workspace
-          mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; exit 1; }
-          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; exit 1; }
-          if [ ! -d "kernel_platform/common" ]; then
-            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee dir_structure.log || exit 1
-          fi
-          if [ ! -f "kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found" >> dir_structure.log
-            exit 1
-          fi
+          mkdir -p kernel_workspace && cd kernel_workspace
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+          repo sync -j8 --force-sync --fail-fast
+          [ -d kernel_platform/common ] || git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common
+          [ -f kernel_platform/common/arch/arm64/configs/gki_defconfig ] || { echo "Error: gki_defconfig not found"; exit 1; }
           mkdir -p kernel_platform/msm-kernel
           rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
-          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
+          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion
 
       - name: Configure Kernel
         run: |
@@ -147,44 +128,34 @@ jobs:
 
       - name: Clean Bazel
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform
           tools/bazel clean --expunge
 
       - name: Configure SukiSU
         if: ${{ github.event.inputs.kernelsu_variant == 'SukiSU-Ultra' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform
-          if [[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]]; then
-            BRANCH=""
-          else
-            BRANCH="-s susfs-dev"
-          fi
+          BRANCH=$([[ "${{ github.event.inputs.kernelsu_version }}" == "tag" ]] && echo "" || echo "-s susfs-dev")
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/${{ github.event.inputs.kernelsu_variant }}/main/kernel/setup.sh" | bash $BRANCH
           cd KernelSU
-          KSU_VERSION=$(expr $(git rev-list --count main) + 10606)
+          KSU_VERSION=$(( $(git rev-list --count main) + 10606 ))
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=[0-9]*/DKSU_VERSION=$KSU_VERSION/" kernel/Makefile
 
       - name: Integrate Sched Ext
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace
-          git clone https://github.com/cctv18/sched_ext.git
-          rm -rf ./sched_ext/.git
-          rm -rf ./sched_ext/README.md
-          cp -r ./sched_ext/* ./kernel_platform/common/kernel/sched
-          echo "Sched_ext integrated successfully" > sched_ext.log
+          git clone --depth=1 https://github.com/cctv18/sched_ext.git
+          cp -r sched_ext/* kernel_platform/common/kernel/sched
+          rm -rf sched_ext
 
       - name: Apply SUSFS Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
@@ -197,67 +168,68 @@ jobs:
       - name: Apply VFS Patches
         if: ${{ github.event.inputs.VFS_patch_ENABLED == 'enable' }}
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
           patch -p1 -F 3 < syscall_hooks.patch
 
       - name: Add Kernel Configurations
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform
           CONFIG_FILE=common/arch/arm64/configs/gki_defconfig
           cat << EOF >> $CONFIG_FILE
-			CONFIG_KSU=y
-			CONFIG_KSU_WITH_KPROBES=n
-			CONFIG_KSU_SUSFS=y
-			CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-			CONFIG_KSU_SUSFS_SUS_PATH=y
-			CONFIG_KSU_SUSFS_SUS_MOUNT=y
-			CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-			CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-			CONFIG_KSU_SUSFS_SUS_KSTAT=y
-			CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-			CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-			CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-			CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-			CONFIG_KSU_SUSFS_ENABLE_LOG=y
-			CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-			CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-			CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-			CONFIG_KSU_SUSFS_SUS_SU=n
-			CONFIG_TMPFS_XATTR=y
-			CONFIG_TMPFS_POSIX_ACL=y
-			CONFIG_FIG_IP_NF_NAT=y
-			CONFIG_IP_NF_TARGET_TTL=y
-			CONFIG_IP6_NF_TARGET_HL=y
-			CONFIG_IP6_NF_MATCH_HL=y
-			CONFIG_DEBUG_KERNEL=n
-			CONFIG_DYNAMIC_DEBUG=n
-			CONFIG_DEBUG_INFO=n
-			CONFIG_TCP_CONG_ADVANCED=y
-			CONFIG_TCP_CONG_BBR=y
-			CONFIG_DEFAULT_TCP_CONG="bbr"
-			CONFIG_TCP_CONG_CDG=y
-			CONFIG_DEFAULT_BBR=y
-			CONFIG_DEFAULT_CUBIC=n
-			CONFIG_DEFAULT_CDG=n
-			CONFIG_NET_SCH_DEFAULT=y
-			CONFIG_DEFAULT_FQ=y
-			CONFIG_DEFAULT_NET_SCH="fq"			
-			CONFIG_NET_SCH_SFQ=y
-			CONFIG_NET_SCH_TBF=y
-			CONFIG_TCP_CONG_BIC=n
-			CONFIG_TCP_CONG_WESTWOOD=n
-			CONFIG_TCP_CONG_HTCP=y
-			CONFIG_IP_NF_TARGET_ECN=y
-			CONFIG_IP_ECN=y
-			CONFIG_TCP_ECN=y
-			CONFIG_IPV6_ECN=y
-			CONFIG_NET_SCH_FQ_CODEL=y
-			EOF
+          CONFIG_KSU=y
+          CONFIG_KSU_WITH_KPROBES=n
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_WIREGUARD=y
+          CONFIG_IP_NF_NAT=y
+          CONFIG_IP_NF_TARGET_TTL=y
+          CONFIG_IP6_NF_TARGET_HL=y
+          CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_DEBUG_KERNEL=n
+          CONFIG_DYNAMIC_DEBUG=n
+          CONFIG_DEBUG_INFO=n
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_TCP_CONG="bbr"
+          CONFIG_TCP_CONG_CDG=y
+          CONFIG_DEFAULT_BBR=y
+          CONFIG_DEFAULT_CUBIC=n
+          CONFIG_DEFAULT_CDG=n
+          CONFIG_NET_SCH_DEFAULT=y
+          CONFIG_DEFAULT_FQ=y
+          CONFIG_DEFAULT_NET_SCH="fq"
+          CONFIG_NET_SCH_HTB=n
+          CONFIG_NET_SCH_PRIO=n
+          CONFIG_NET_SCH_SFQ=y
+          CONFIG_NET_SCH_TBF=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=n
+          CONFIG_TCP_CONG_HTCP=y
+          CONFIG_IP_NF_TARGET_ECN=y
+          CONFIG_IP_ECN=y
+          CONFIG_TCP_ECN=y
+          CONFIG_IPV6_ECN=y
+          CONFIG_NET_SCH_FQ_CODEL=y
+          EOF
           if [[ "${{ github.event.inputs.kernelsu_variant }}" == "SukiSU-Ultra" ]]; then
             echo "CONFIG_KPM=y" >> $CONFIG_FILE
           fi
@@ -269,10 +241,9 @@ jobs:
           fi
           sed -i 's/check_defconfig//' common/build.config.gki
 
-      - name: Add Make Name
+      - name: Set Kernel Name
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform
           if [[ "${{ github.event.inputs.KERNEL_VERSION }}" == "6.1" || "${{ github.event.inputs.KERNEL_VERSION }}" == "6.6" ]]; then
             sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" build/kernel/kleaf/impl/stamp.bzl
@@ -281,8 +252,7 @@ jobs:
 
       - name: Log Kernel Configuration
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform/common
           grep "CONFIG_CMDLINE" arch/arm64/configs/gki_defconfig > config_cmdline.log || echo "CONFIG_CMDLINE not found" > config_cmdline.log
           grep -E "^CONFIG_(KSU|KPM|KSU_SUSFS|SCHED_EXT|SCHED_SLIM)" arch/arm64/configs/gki_defconfig > config_susfs.log || echo "No KSU/SUSFS/Sched Ext configs found" > config_susfs.log
@@ -290,15 +260,13 @@ jobs:
       - name: Build Kernel
         timeout-minutes: 60
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform
           tools/bazel run --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
 
       - name: Generate Kernel Images
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform/dist
           cp Image Image_original
           curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
@@ -309,16 +277,15 @@ jobs:
 
       - name: Package Kernel
         run: |
-          set -e
-          set -x
+          set -ex
           cd kernel_workspace/kernel_platform/dist
           git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-no_kpm
           git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3-kpm
           rm -rf AnyKernel3-{kpm,no_kpm}/.git AnyKernel3-{kpm,no_kpm}/push.sh
           cp Image AnyKernel3-no_kpm/Image
           cp Image_kpm AnyKernel3-kpm/Image
-          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip . && cd ..
-          cd AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip . && cd ..
+          cd AnyKernel3-no_kpm && zip -r ../AnyKernel3-no_kpm_${{ env.KSUVER }}_13r.zip .
+          cd ../AnyKernel3-kpm && zip -r ../AnyKernel3-kpm_${{ env.KSUVER }}_13r.zip .
 
       - name: Upload Artifacts
         if: success()
