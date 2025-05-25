@@ -99,77 +99,27 @@ jobs:
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
           export PATH=/usr/local/bin:$PATH
-          repo --version > repo_version.log
+          repo --version > repo_version.log	  
       - name: Initialize Repo and Sync
         run: |
+          set -e
+          set -x
           export PATH=/usr/local/bin:$PATH
           rm -rf kernel_workspace
           mkdir kernel_workspace && cd kernel_workspace
-          echo "Checking available branches:" > branch_check.log
-          git ls-remote https://github.com/OnePlusOSS/kernel_manifest.git | grep "refs/heads/oneplus/${{ github.event.inputs.CPU }}" >> branch_check.log || echo "Branch refs/heads/oneplus/${{ github.event.inputs.CPU }} not found" >> branch_check.log
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; echo "Error: repo init failed"; exit 1; }
-          echo "Listing .repo/manifests:" >> manifest.log
-          ls -la .repo/manifests >> manifest.log
-          if [ -f ".repo/manifests/${{ github.event.inputs.FEIL }}.xml" ]; then
-            echo "Manifest content:" >> manifest.log
-            cat .repo/manifests/${{ github.event.inputs.FEIL }}.xml >> manifest.log
-            if ! grep -q 'kernel_platform/common' .repo/manifests/${{ github.event.inputs.FEIL }}.xml; then
-              echo "Warning: kernel_platform/common not found in manifest, will attempt fallback" >> manifest.log
-            fi
-          else
-            echo "Error: Manifest file ${{ github.event.inputs.FEIL }}.xml not found" >> manifest.log
-            cat repo_init.log
-            exit 1
-          fi
-          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; echo "Error: repo sync failed"; exit 1; }
-          echo "Directory structure after repo sync:" > dir_structure.log
-          ls -la . >> dir_structure.log
-          if [ -d "kernel_platform" ]; then
-            echo "kernel_platform contents:" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
-            echo "Full kernel_platform structure:" >> dir_structure.log
-            find kernel_platform -maxdepth 3 >> dir_structure.log
-          else
-            echo "Error: kernel_platform directory not found, attempting fallback" >> dir_structure.log
-            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common >> dir_structure.log 2>&1 || { echo "Error: Failed to clone kernel repository"; exit 1; }
-          fi
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1 2>&1 | tee repo_init.log || { cat repo_init.log; exit 1; }
+          repo sync -j8 --force-sync --fail-fast 2>&1 | tee repo_sync.log || { cat repo_sync.log; exit 1; }
           if [ ! -d "kernel_platform/common" ]; then
-            echo "Warning: kernel_platform/common directory not found, checking alternatives" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
-            if [ -d "kernel_platform/kernel" ]; then
-              echo "Found kernel_platform/kernel, copying to common" >> dir_structure.log
-              cp -r kernel_platform/kernel kernel_platform/common
-            elif [ -d "kernel_platform/source" ]; then
-              echo "Found kernel_platform/source, copying to common" >> dir_structure.log
-              cp -r kernel_platform/source kernel_platform/common
-            elif [ -f "kernel_platform/arch/arm64/configs/gki_defconfig" ]; then
-              echo "Found gki_defconfig in kernel_platform, using as common" >> dir_structure.log
-              mkdir -p kernel_platform/common
-              mv kernel_platform/* kernel_platform/common/ || true
-            else
-              echo "No kernel source found, cloning directly" >> dir_structure.log
-              git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common >> dir_structure.log 2>&1 || { echo "Error: Failed to clone kernel repository"; exit 1; }
-            fi
-          fi
-          if [ ! -d "kernel_platform/common" ]; then
-            echo "Error: kernel_platform/common directory still not found after fallback" >> dir_structure.log
-            ls -la kernel_platform >> dir_structure.log
-            exit 1
+            git clone --depth=1 -b sm8650 https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel_platform/common 2>&1 | tee dir_structure.log || exit 1
           fi
           if [ ! -f "kernel_platform/common/arch/arm64/configs/gki_defconfig" ]; then
-            echo "Error: gki_defconfig not found in kernel_platform/common/arch/arm64/configs/" >> dir_structure.log
-            ls -la kernel_platform/common/arch/arm64/configs/ || echo "configs directory not found" >> dir_structure.log
+            echo "Error: gki_defconfig not found" >> dir_structure.log
             exit 1
           fi
-          if [ ! -d "kernel_platform/msm-kernel" ]; then
-            echo "Warning: kernel_platform/msm-kernel directory not found, creating empty directory" >> dir_structure.log
-            mkdir -p kernel_platform/msm-kernel
-          fi
-          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports in common!" >> dir_structure.log
-          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports in msm-kernel!" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion || echo "No setlocalversion script in common" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion || echo "No setlocalversion script in msm-kernel" >> dir_structure.log
-          sed -i 's/ -dirty//g' kernel_platform/external/dtc/scripts/setlocalversion || echo "No setlocalversion script in dtc" >> dir_structure.log
+          mkdir -p kernel_platform/msm-kernel
+          rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
+          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
+
 		  
       - name: Configure Kernel
         run: |
