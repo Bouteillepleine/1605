@@ -118,9 +118,7 @@ jobs:
           fi
           mkdir -p kernel_platform/msm-kernel
           rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
-          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
-
-		  
+          sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null		  
       - name: Configure Kernel
         run: |
           set -e
