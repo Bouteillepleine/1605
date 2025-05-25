@@ -249,8 +249,7 @@ jobs:
           echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
-          sed -i 's/check_defconfig//' ./common/build.config.gki
-		  
+          sed -i 's/check_defconfig//' ./common/build.config.gki		  
       - name: Integrate Sched Ext
         run: |
           set -e
@@ -260,8 +259,7 @@ jobs:
           rm -rf ./sched_ext/.git
           rm -rf ./sched_ext/README.md
           cp -r ./sched_ext/* ./kernel_platform/common/kernel/sched
-          echo "Sched_ext integrated successfully" > sched_ext.log
-		  
+          echo "Sched_ext integrated successfully" > sched_ext.log		  
       - name: Add Make Name
         run: |
           cd kernel_workspace/kernel_platform
