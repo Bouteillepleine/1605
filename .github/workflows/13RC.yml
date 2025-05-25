@@ -237,6 +237,16 @@ jobs:
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' common/scripts/setlocalversion
 
+      - name: sched
+        run: |
+          set -e
+          set -x
+          cd kernel_workspace
+            git clone https://github.com/cctv18/sched_ext.git
+            rm -rf ./sched_ext/.git
+            rm -rf ./sched_ext/README.md
+            cp -r ./sched_ext/* ./common/kernel/sched
+
       - name: Build Kernel
         run: |
           set -e
