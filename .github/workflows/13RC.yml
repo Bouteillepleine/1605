@@ -258,17 +258,6 @@ jobs:
           fi
           sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' common/scripts/setlocalversion
 
-      - name: Apply Scheduler Extensions
-        run: |
-          set -e
-          set -x
-          cd kernel_workspace
-          git clone https://github.com/cctv18/sched_ext.git
-          rm -rf ./sched_ext/.git
-          rm -rf ./sched_ext/README.md
-          mkdir -p kernel_platform/common/kernel/sched
-          cp -r ./sched_ext/* ./kernel_platform/common/kernel/sched
-
       - name: Log Kernel Configuration
         run: |
           set -e
