@@ -53,9 +53,7 @@ on:
         type: choice
         options:
           - enable
-          - disable
-        default: 'enable'
-
+          - disable     
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -143,9 +141,9 @@ jobs:
             echo "Error: CONFIG_CMDLINE not found in gki_defconfig" > config_error.log
             exit 1
           fi
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,crypto_lz4p,ext4_inode_test,f_fs_ipc_log,gzvm,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,oplus_network_stats_calc,qcom_cpufreq_thermal,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=ext4_inode_test,f_fs_ipc_log,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
 
-      - name: Clean Build Environment
+      - name: Clean Bazel
         run: |
           set -e
           set -x
@@ -163,6 +161,17 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile || true
+
+      - name: Integrate Sched Ext
+        run: |
+          set -e
+          set -x
+          cd kernel_workspace
+          git clone https://github.com/cctv18/sched_ext.git
+          rm -rf ./sched_ext/.git
+          rm -rf ./sched_ext/README.md
+          cp -r ./sched_ext/* ./kernel_platform/common/kernel/sched
+          echo "Sched_ext integrated successfully" > sched_ext.log
 
       - name: Apply SUSFS Patches
         if: ${{ github.event.inputs.SUSFS_ENABLED == 'true' }}
@@ -187,7 +196,7 @@ jobs:
           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
           patch -p1 -F 3 < syscall_hooks.patch
 
-      - name: Add SUSFS Configuration Settings
+      - name: Add SUSFS and Sched Ext Configuration Settings
         run: |
           set -e
           set -x
@@ -264,7 +273,7 @@ jobs:
           set -x
           cd kernel_workspace/kernel_platform/common
           grep "CONFIG_CMDLINE" arch/arm64/configs/gki_defconfig > config_cmdline.log || echo "CONFIG_CMDLINE not found" > config_cmdline.log
-          grep -E "^CONFIG_(KSU|KPM|KSU_SUSFS)" arch/arm64/configs/gki_defconfig > config_susfs.log || echo "No KSU/SUSFS configs found" > config_susfs.log
+          grep -E "^CONFIG_(KSU|KPM|KSU_SUSFS|SCHED_EXT|SCHED_SLIM)" arch/arm64/configs/gki_defconfig > config_susfs.log || echo "No KSU/SUSFS/Sched Ext configs found" > config_susfs.log
 
       - name: Build Kernel
         timeout-minutes: 60
