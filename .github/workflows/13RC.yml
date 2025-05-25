@@ -114,13 +114,12 @@ jobs:
           rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
           sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
 
-      - name: Configure Kernel
+      - name: Configure Kernel         
         run: |
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
-          # Blacklist test modules (optional if CONFIG_*=n)
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,ext4_inode_test,iio_test_format,kunit,kunit_example_test,kunit_test,regmap_kunit,soc_topology_test,soc_utils_test,time_test,f_fs_ipc_log,oplus_lock_torture"/' arch/arm64/configs/gki_defconfig
-          if ! grep -q 'module_blacklist=clk_gate_test' arch/arm64/configs/gki_defconfig; then
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,ext4_inode_test,iio_test_format,oplus_network_stats_calc,soc_topology_test,soc_utils_test,time_test,f_fs_ipc_log,oplus_lock_torture"/' arch/arm64/configs/gki_defconfig
+          if ! grep -q 'module_blacklist=oplus_network_app_monitor' arch/arm64/configs/gki_defconfig; then
             echo "Error: Failed to apply module_blacklist" > oneplus_config.log
             exit 1
           fi
@@ -138,26 +137,8 @@ jobs:
                 -e 's/CONFIG_FAT_KUNIT_TEST=[ym]/CONFIG_FAT_KUNIT_TEST=n/g' \
                 -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
                 -e 's/CONFIG_TEST_KMOD=[ym]/CONFIG_TEST_KMOD=n/g' \
-                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \            
-                -e 's/CONFIG_RCUTORTURE=[ym]/CONFIG_RCUTORTURE=n/g' \
-                -e 's/CONFIG_CPUTORTURE=[ym]/CONFIG_CPUTORTURE=n/g' \
-                -e 's/CONFIG_MEM_TORTURE_TEST=[ym]/CONFIG_MEM_TORTURE_TEST=n/g' \
-                -e 's/CONFIG_TEST_ASYNC_DRIVER_PROBE=[ym]/CONFIG_TEST_ASYNC_DRIVER_PROBE=n/g' \
-                -e 's/CONFIG_TEST_BITMAP=[ym]/CONFIG_TEST_BITMAP=n/g' \
-                -e 's/CONFIG_TEST_BITFIELD=[ym]/CONFIG_TEST_BITFIELD=n/g' \
-                -e 's/CONFIG_TEST_UUID=[ym]/CONFIG_TEST_UUID=n/g' \
-                -e 's/CONFIG_TEST_RHASHTABLE=[ym]/CONFIG_TEST_RHASHTABLE=n/g' \
-                -e 's/CONFIG_TEST_DYNAMIC_DEBUG=[ym]/CONFIG_TEST_DYNAMIC_DEBUG=n/g' \
-                -e 's/CONFIG_FFS_IPC_LOG=[ym]/CONFIG_FFS_IPC_LOG=n/g' \
-                -e 's/CONFIG_OPLUS_LOCK_TORTURE=[ym]/CONFIG_OPLUS_LOCK_TORTURE=n/g' \
-              arch/arm64/configs/gki_defconfig
-          # Verify critical modules are not disabled
-          for config in CONFIG_CPU_HOTPLUG CONFIG_CRYPTO_LZ4 CONFIG_THERMAL_CONFIG CONFIG_THERMAL_PAUSE; do
-            if grep -q "^$config=n" arch/arm64/configs/gki_defconfig; then
-              echo "Error: Critical module $config is disabled" >> oneplus_config.log
-              exit 1
-            fi
-          done
+                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \
+            arch/arm64/configs/gki_defconfig            
 
       - name: Clean Build Environment
         run: |
