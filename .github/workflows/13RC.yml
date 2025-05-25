@@ -119,50 +119,7 @@ jobs:
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
           sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,crypto_lz4p,ext4_inode_test,f_fs_ipc_log,gzvm,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,oplus_network_stats_calc,qcom_cpufreq_thermal,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
-      - name: Create Verification Script
-        run: |
-          # Write the verification script to a file
-          cat << 'EOF' > verify_disabled_modules.sh
-          #!/bin/bash
-          set -e
-          DEFCONFIG="kernel_workspace/kernel_platform/common/arch/arm64/configs/gki_defconfig"
-          MODULE_BLACKLIST=(
-              "clk_gate_test"
-              "crypto_lz4p"
-              "ext4_inode_test"
-              "f_fs_ipc_log"
-              "gzvm"
-              "hung_task_enh"
-              "iio_test_format"
-              "kunit"
-              "kunit_example_test"
-              "kunit_test"
-              "oplus_bsp_sigkill_diagnosis"
-              "oplus_lock_torture"
-              "oplus_network_stats_calc"
-              "qcom_cpufreq_thermal"
-              "regmap_kunit"
-              "soc_topology_test"
-              "soc_utils_test"
-          )
-          if [ ! -f "$DEFCONFIG" ]; then
-              echo "Error: $DEFCONFIG not found"
-              exit 1
-          fi
-          echo "Checking module_blacklist in CONFIG_CMDLINE..."
-          if ! grep -q 'CONFIG_CMDLINE=.*module_blacklist' "$DEFCONFIG"; then
-              echo "Error: module_blacklist not found in CONFIG_CMDLINE"
-              exit 1
-          fi
-          for module in "${MODULE_BLACKLIST[@]}"; do
-              if grep -q "module_blacklist=.*$module" "$DEFCONFIG"; then
-                  echo "Module $module is correctly blacklisted"
-              else
-                  echo "Error: Module $module is not blacklisted in CONFIG_CMDLINE"
-                  exit 1
-              fi
-          done
-          EOF
+
       - name: Clean Build Environment
         run: |
           cd kernel_workspace/kernel_platform
