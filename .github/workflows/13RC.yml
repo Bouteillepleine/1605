@@ -114,28 +114,55 @@ jobs:
           rm -f kernel_platform/{common,msm-kernel}/android/abi_gki_protected_exports_* 2>/dev/null
           sed -i 's/ -dirty//g' kernel_platform/{common,msm-kernel,external/dtc}/scripts/setlocalversion 2>/dev/null
 
-      - name: Configure Kernel         
+      - name: Configure Kernel
         run: |
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
-          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,ext4_inode_test,iio_test_format,oplus_network_stats_calc,soc_topology_test,soc_utils_test,time_test,f_fs_ipc_log,oplus_lock_torture"/' arch/arm64/configs/gki_defconfig
-          # Disable additional test modules
-          sed -i -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
-                -e 's/CONFIG_INPUT_KUNIT_TEST=[ym]/CONFIG_INPUT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=[ym]/CONFIG_SND_SOC_TOPOLOGY_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_SND_SOC_UTILS_KUNIT_TEST=[ym]/CONFIG_SND_SOC_UTILS_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_HID_KUNIT_TEST=[ym]/CONFIG_HID_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_RTC_LIB_KUNIT_TEST=[ym]/CONFIG_RTC_LIB_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_CLK_KUNIT_TEST=[ym]/CONFIG_CLK_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_CLK_GATE_KUNIT_TEST=[ym]/CONFIG_CLK_GATE_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_IIO_FORMAT_KUNIT_TEST=[ym]/CONFIG_IIO_FORMAT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_EXT4_KUNIT_TESTS=[ym]/CONFIG_EXT4_KUNIT_TESTS=n/g' \
-                -e 's/CONFIG_FAT_KUNIT_TEST=[ym]/CONFIG_FAT_KUNIT_TEST=n/g' \
-                -e 's/CONFIG_KUNIT_ALL_TESTS=[ym]/CONFIG_KUNIT_ALL_TESTS=n/g' \
-                -e 's/CONFIG_TEST_KMOD=[ym]/CONFIG_TEST_KMOD=n/g' \
-                -e 's/CONFIG_USB_KUNIT_TEST=[ym]/CONFIG_USB_KUNIT_TEST=n/g' \
-            arch/arm64/configs/gki_defconfig            
-
+          sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,crypto_lz4p,ext4_inode_test,f_fs_ipc_log,gzvm,hung_task_enh,iio_test_format,kunit,kunit_example_test,kunit_test,oplus_bsp_sigkill_diagnosis,oplus_lock_torture,oplus_network_stats_calc,qcom_cpufreq_thermal,regmap_kunit,soc_topology_test,soc_utils_test"/' arch/arm64/configs/gki_defconfig
+      - name: Create Verification Script
+        run: |
+          # Write the verification script to a file
+          cat << 'EOF' > verify_disabled_modules.sh
+          #!/bin/bash
+          set -e
+          DEFCONFIG="kernel_workspace/kernel_platform/common/arch/arm64/configs/gki_defconfig"
+          MODULE_BLACKLIST=(
+              "clk_gate_test"
+              "crypto_lz4p"
+              "ext4_inode_test"
+              "f_fs_ipc_log"
+              "gzvm"
+              "hung_task_enh"
+              "iio_test_format"
+              "kunit"
+              "kunit_example_test"
+              "kunit_test"
+              "oplus_bsp_sigkill_diagnosis"
+              "oplus_lock_torture"
+              "oplus_network_stats_calc"
+              "qcom_cpufreq_thermal"
+              "regmap_kunit"
+              "soc_topology_test"
+              "soc_utils_test"
+          )
+          if [ ! -f "$DEFCONFIG" ]; then
+              echo "Error: $DEFCONFIG not found"
+              exit 1
+          fi
+          echo "Checking module_blacklist in CONFIG_CMDLINE..."
+          if ! grep -q 'CONFIG_CMDLINE=.*module_blacklist' "$DEFCONFIG"; then
+              echo "Error: module_blacklist not found in CONFIG_CMDLINE"
+              exit 1
+          fi
+          for module in "${MODULE_BLACKLIST[@]}"; do
+              if grep -q "module_blacklist=.*$module" "$DEFCONFIG"; then
+                  echo "Module $module is correctly blacklisted"
+              else
+                  echo "Error: Module $module is not blacklisted in CONFIG_CMDLINE"
+                  exit 1
+              fi
+          done
+          EOF
       - name: Clean Build Environment
         run: |
           cd kernel_workspace/kernel_platform
