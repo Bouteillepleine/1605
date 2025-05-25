@@ -119,10 +119,6 @@ jobs:
           cd kernel_workspace/kernel_platform/common
           chmod 644 arch/arm64/configs/gki_defconfig
           sed -i 's/CONFIG_CMDLINE="\(.*\)"/CONFIG_CMDLINE="\1 module_blacklist=clk_gate_test,ext4_inode_test,iio_test_format,oplus_network_stats_calc,soc_topology_test,soc_utils_test,time_test,f_fs_ipc_log,oplus_lock_torture"/' arch/arm64/configs/gki_defconfig
-          if ! grep -q 'module_blacklist=oplus_lock_torture' arch/arm64/configs/gki_defconfig; then
-            echo "Error: Failed to apply module_blacklist" > oneplus_config.log
-            exit 1
-          fi
           # Disable additional test modules
           sed -i -e 's/CONFIG_REGMAP_KUNIT=[ym]/CONFIG_REGMAP_KUNIT=n/g' \
                 -e 's/CONFIG_INPUT_KUNIT_TEST=[ym]/CONFIG_INPUT_KUNIT_TEST=n/g' \
