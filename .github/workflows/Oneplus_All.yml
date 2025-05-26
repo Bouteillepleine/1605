@@ -155,7 +155,7 @@ jobs:
       - name: Add BBR Support
         run: |
           echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/kernel_platform"
+          cd kernel_workspace/kernel_platform
           
           echo "Adding configuration settings to gki_defconfig..."
           echo "CONFIG_TCP_CONG_ADVANCED=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -182,7 +182,7 @@ jobs:
       - name: Add TTL Target Support
         run: |
           echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/kernel_platform"
+          cd kernel_workspace/kernel_platform
           
           echo "Adding configuration settings to gki_defconfig..."
           echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -192,7 +192,7 @@ jobs:
       - name: Disable blacklisted modules
         run: |
           echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG/kernel_platform"
+          cd kernel_workspace/kernel_platform
           
           echo "Cleaning gki_defconfig of blacklisted modules..."
           sed -i '/CONFIG_EXT4_INODE_TEST=/d' ./common/arch/arm64/configs/gki_defconfig
